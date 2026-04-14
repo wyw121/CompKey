@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / Editor
+.DS_Store
+.vscode/
+
+# Large raw datasets (keep local, don't track)
+数据分析与商务智能数据/
+
+# Optional temporary outputs
+*.log
+
+# Oversized generated artifact
+deliverables/P1/run_train_v2_full/cleaned_queries_v1.csv
