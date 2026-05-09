@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-04-20T16:30:53",
+  "input_path": "d:/material/大三下学期2025-2026-2/数据分析与商务智能/CompKey/数据分析与商务智能数据/搜索日志/SogouQ.reduced/SogouQ.reduced",
+  "seed_csv": "d:/material/大三下学期2025-2026-2/数据分析与商务智能/CompKey/deliverables/P1/seed_keywords_v1.csv",
+  "data_source": "search_log",
+  "chosen_encoding": "gb18030",
+  "total_lines": 1724264,
+  "parsed_lines": 1724066,
+  "bad_lines": 198,
+  "cleaned_query_count": 1694229,
+  "seed_related_count": 1166,
+  "token_count": 1357
+}
