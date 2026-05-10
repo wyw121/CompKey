@@ -15,3 +15,7 @@ __pycache__/
 
 # Oversized generated artifact
 deliverables/P1/run_train_v2_full/cleaned_queries_v1.csv
+deliverables/P1/run_log_v1_main/cleaned_queries_v1.csv
+deliverables/P1/run_log_v1_main/*.csv
+deliverables/P1/run_log_v1_main/*.json
+deliverables/P1/run_log_v1_main/*.log
