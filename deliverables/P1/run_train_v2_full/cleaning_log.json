@@ -1,11 +1,13 @@
 {
-  "timestamp": "2026-04-14T10:42:02",
-  "input_path": "d:/material/大三下学期2025-2026-2/数据分析与商务智能/CompKey/数据分析与商务智能数据/数据/user_tag_query.10W.TRAIN",
-  "seed_csv": "d:/material/大三下学期2025-2026-2/数据分析与商务智能/CompKey/deliverables/P1/seed_keywords_v1.csv",
+  "timestamp": "2026-05-24T20:59:26",
+  "input_path": "d:\\\\material\\\\大三下学期2025-2026-2\\\\数据分析与商务智能\\\\CompKey\\\\数据分析与商务智能数据\\\\数据\\\\user_tag_query.10W.TRAIN",
+  "seed_csv": "deliverables/P1/seed_keywords_v1.csv",
+  "data_source": "search_log",
   "chosen_encoding": "gb18030",
   "total_lines": 100000,
   "parsed_lines": 100000,
-  "cleaned_query_count": 14406186,
-  "seed_related_count": 35845,
-  "token_count": 163404
+  "bad_lines": 0,
+  "cleaned_query_count": 100000,
+  "seed_related_count": 265,
+  "token_count": 1207
 }

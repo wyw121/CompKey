@@ -1,0 +1,22 @@
+sample seeds: ['笔记本电脑', '手机壳', '蓝牙耳机']
+
+seed: 笔记本电脑
+  {'seed_keyword': '笔记本电脑', 'candidate_keyword': '牌子', 'competition_score': 0.02872, 'rank_no': 1, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '笔记本电脑', 'candidate_keyword': '黑屏', 'competition_score': 0.014193, 'rank_no': 2, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '笔记本电脑', 'candidate_keyword': '开机', 'competition_score': 0.012401, 'rank_no': 3, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '笔记本电脑', 'candidate_keyword': '上网', 'competition_score': 0.008824, 'rank_no': 4, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '笔记本电脑', 'candidate_keyword': '不到', 'competition_score': 0.008824, 'rank_no': 5, 'evidence_source': 'offline_token_frequency'}
+
+seed: 手机壳
+  {'seed_keyword': '手机壳', 'candidate_keyword': '手机', 'competition_score': 0.068241, 'rank_no': 1, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '手机壳', 'candidate_keyword': '壳', 'competition_score': 0.066467, 'rank_no': 2, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '手机壳', 'candidate_keyword': 'oppor9', 'competition_score': 0.023244, 'rank_no': 3, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '手机壳', 'candidate_keyword': '图片', 'competition_score': 0.015034, 'rank_no': 4, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '手机壳', 'candidate_keyword': '5s', 'competition_score': 0.014405, 'rank_no': 5, 'evidence_source': 'offline_token_frequency'}
+
+seed: 蓝牙耳机
+  {'seed_keyword': '蓝牙耳机', 'candidate_keyword': '耳机', 'competition_score': 0.066857, 'rank_no': 1, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '蓝牙耳机', 'candidate_keyword': '蓝牙', 'competition_score': 0.066857, 'rank_no': 2, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '蓝牙耳机', 'candidate_keyword': '4s', 'competition_score': 0.017371, 'rank_no': 3, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '蓝牙耳机', 'candidate_keyword': '信号', 'competition_score': 0.017371, 'rank_no': 4, 'evidence_source': 'offline_token_frequency'}
+  {'seed_keyword': '蓝牙耳机', 'candidate_keyword': '充满', 'competition_score': 0.017371, 'rank_no': 5, 'evidence_source': 'offline_token_frequency'}

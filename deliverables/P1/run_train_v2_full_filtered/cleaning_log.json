@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-05-24T20:57:24",
+  "input_path": "deliverables/P1/run_train_v2_full_filtered/input_seed_lines.TRAIN",
+  "seed_csv": "deliverables/P1/seed_keywords_v1.csv",
+  "data_source": "search_log",
+  "chosen_encoding": "gb18030",
+  "total_lines": 13559,
+  "parsed_lines": 13559,
+  "bad_lines": 0,
+  "cleaned_query_count": 13559,
+  "seed_related_count": 265,
+  "token_count": 1207
+}

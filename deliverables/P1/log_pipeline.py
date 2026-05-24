@@ -38,30 +38,59 @@ def parse_log_line(line: str) -> Optional[Dict[str, str]]:
     line = line.strip("\n\r")
     if not line:
         return None
-
-    # Sogou日志通常为tab分隔：时间\t用户ID\t[查询词]\t结果序号\t点击序号\t点击URL
+    # Sogou日志常见为tab分隔：时间\t用户ID\t[查询词]\t结果序号\t点击序号\t点击URL
+    # 但部分数据集列位置不同（例如 query 在第5列）。尝试智能定位包含查询词的列。
     parts = line.split("\t")
-    if len(parts) < 6:
-        # 容错：按任意空白再分一次
+    if len(parts) < 2:
         parts = re.split(r"\s+", line)
-        if len(parts) < 6:
+        if len(parts) < 2:
             return None
 
-    query_raw = parts[2].strip()
+    # 寻找最可能包含查询词的列：优先包含中日韩文字或方括号的列
+    query_raw = None
+    for p in parts:
+        if QUERY_BRACKET_PATTERN.search(p) or re.search(r"[\u4e00-\u9fff]", p):
+            query_raw = p.strip()
+            break
+
+    # 回退到常见位置（第三列，索引2）
+    if query_raw is None and len(parts) > 2:
+        query_raw = parts[2].strip()
+
+    if not query_raw:
+        return None
+
     m = QUERY_BRACKET_PATTERN.search(query_raw)
     query = (m.group(1) if m else query_raw).strip()
     query = query.strip("[]")
-
     if not query:
         return None
 
+    # 为了兼容不同列布局，尝试构造其他字段的容错取值
+    def safe_get(i: int) -> str:
+        return parts[i].strip() if i < len(parts) else ""
+
+    # 默认 mapping：time=user_id=parts[0]/parts[1]
+    query_time = safe_get(0)
+    user_id = safe_get(1)
+
+    # 试图找到 query 列的索引，以便推断后续的 result_rank/click_rank/click_url
+    try:
+        q_index = parts.index(query_raw)
+    except ValueError:
+        q_index = 2 if len(parts) > 2 else 0
+
+    result_rank = safe_get(q_index + 1)
+    click_rank = safe_get(q_index + 2)
+    click_url = safe_get(q_index + 3)
+
     return {
-        "query_time": parts[0].strip(),
-        "user_id": parts[1].strip(),
+        "query_time": query_time,
+        "user_id": user_id,
         "query": query,
-        "result_rank": parts[3].strip(),
-        "click_rank": parts[4].strip(),
-        "click_url": parts[5].strip(),
+        "result_rank": result_rank,
+        "click_rank": click_rank,
+        "click_url": click_url,
     }
 
 

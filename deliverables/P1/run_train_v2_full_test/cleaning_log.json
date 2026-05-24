@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-05-24T20:44:37",
+  "input_path": "d:\\material\\大三下学期2025-2026-2\\数据分析与商务智能\\CompKey\\数据分析与商务智能数据\\数据\\user_tag_query.10W.TRAIN",
+  "seed_csv": "deliverables\\P1\\seed_keywords_v1.csv",
+  "data_source": "search_log",
+  "chosen_encoding": "gb18030",
+  "total_lines": 20000,
+  "parsed_lines": 20000,
+  "bad_lines": 0,
+  "cleaned_query_count": 20000,
+  "seed_related_count": 0,
+  "token_count": 0
+}
