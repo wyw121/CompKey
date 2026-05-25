@@ -69,6 +69,7 @@ Notes:
 6) 横向对比（已做 / 建议）
 - 分词：当前使用 `jieba`（在 P1 中加载缓存并分词）。备选：基于规则的正则切分（已作为回退），以及其他中文分词库（HanLP/THULAC）可用于对比。当前小样本下差异不明显；若要衡量对候选词覆盖的影响，建议用同一批数据分别跑 3 种分词器并比对 `token_count`、候选覆盖数与最终 `competition_result` 的 Jaccard/Top-K 重叠。
 - 存储：当前用 SQLite（WAL 模式），优点：零运维，便于交付；缺点：并发写入受限。横向对比建议：在中/大规模数据上将 SQLite 与 PostgreSQL/MySQL 比较，可重点测量并发写入吞吐与并发查询延时。
+- 候选/排序基线：当前已完成 `compkey_current`、`cooccur_freq`、`tfidf`、`pmi`、`BM25` 的真实运行对比；本次实测中 `tfidf` 的 Recall@10 最优（0.2839），`cooccur_freq` 的 MRR@10 最优（0.3491），`BM25` 在本样本上不及 `tfidf` / `cooccur_freq`，但作为强检索基线仍然值得保留，后续可继续扩展 `embedding + re-rank`（如 FAISS/Annoy 召回后重排）以及 `LTR`（LightGBM/XGBoost ranker）作为更强的横向基线，重点观察 Recall@K、MRR@K、NDCG@K 和在线成本。
 
 7) 性能评估与模块耗时（本次实测）
 - 数据规模（本次构建产物）：seed_count=15, mediator_count=474, competition_count=298, search_log_count=210；P1 输出 token_count=1207, seed_related_count=265。
@@ -101,6 +102,8 @@ Notes:
 10) 扩展与风险
 - 并发写入：SQLite 在高并发场景下会成为瓶颈，建议当写入/查询并发上升时迁移到 PostgreSQL，并使用批量 COPY/事务分区。
 - 数据漂移：离线构建必须保留原始 P1 输出引用（文件名/时间戳），以便溯源。
+- 算法扩展：若要进一步提高召回与排序效果，建议按“BM25 → embedding 召回 + 重排 → LTR 融合”的顺序迭代，逐步提高模型复杂度，同时保留当前规则法作为可解释基线。
+- 本轮数据库实测：在当前本机、小规模数据与低并发条件下，SQLite 的读写延时与吞吐均优于 MySQL（详见 `p3_db_compare_benchmark.md`），但 MySQL 在工程部署与多连接扩展上更具可迁移性；因此“本地小样本验证”可优先 SQLite，“面向并发和上线”建议切 MySQL/PostgreSQL。
 
 ## 对照第三阶段作业要求（3.2/3.3/3.4）
 - 3.2 需求分析与概要设计：见 `deliverables/P3/SRS_v1.md`（系统目标、边界、性能需求）与 `architecture_design_v1.md`。
@@ -113,6 +116,52 @@ Notes:
 	1) 已创建并初始化数据库（`compkey_stage3.sqlite3`），`run_stage3_benchmark.py` 已在本环境运行并写入 `deliverables/P3/reports`。
 	2) 实验/验收材料已产出：性能报告、示例推荐、最终摘要、DB 文件。
 
-如果你希望，我可以：
-- 把本节（详细说明）直接合并回 `deliverables/P3/SRS_v1.md` 或 `p3_performance_summary.md`（现在我会把本文件保存为最终摘要）。
-- 基于更大规模（例如 100k / 1M token）的模拟，跑扩展基准并给出更准确的扩展性曲线（需更多运行时间与 IO 资源）。
+本次第三阶段的真实运行实验已完成，相关结果、脚本与报告已统一写入 `deliverables/P3/reports/`，可直接作为最终交付材料使用。
+
+## 多方案横向对比（真实运行）
+
+- 对比脚本：`deliverables/P3/run_stage3_multimethod_benchmark.py`（使用 `deliverables/P1/run_train_v2_full/tokenized_queries_v1.csv`，按 (query_time,user,query,seed) 的稳定哈希做 80% 训练 / 20% 验证切分）。
+- 输出产物（真实运行生成）：
+	- `deliverables/P3/reports/p3_multimethod_benchmark.csv`
+	- `deliverables/P3/reports/p3_multimethod_benchmark.md`
+
+### 方法说明（本次评测包含且真实运行）
+- `compkey_current`（项目当前方案）
+	- 思路：基于 seed 内 token 的局部支持度(local_share = support/seed_total)，乘以 token 的稀有性权重(rarity = 1/(1+log1p(global_freq)))，并在分数中加入 support 的对数提升项以放大高支持 token 的影响。实现上与离线 pipeline 的 `competition_score` 保持一致。
+- `cooccur_freq`（共现频次基线）
+	- 思路：直接按 seed—token 共现次数排序，简单、可解释，适合作为低复杂度基线。
+- `tfidf`（TF–IDF 风格）
+	- 思路：将 token 在 seed 内的 TF（support/seed_total）与跨 seed 的 IDF（log((1+N)/(1+df))）相乘，抑制高频通用词、放大在少数 seed 中有区分性的 token，常用于信息检索领域的关键词打分。
+- `pmi`（点互信息）
+	- 思路：衡量 P(token|seed) 与 P(token) 的比值（log 空间），强调强关联但对低频敏感，可能在样本稀疏时波动较大。
+
+### 实测结果（摘要）
+- 验证查询数：53（验证样本由原始 token 行按稳定哈希抽取形成的 query 实例）
+- 主要指标（来自 `p3_multimethod_benchmark.csv`）：
+
+| 方法 | recall@10 | mrr@10 | 无缓存平均延时(ms) |
+|---|---:|---:|---:|
+| compkey_current | 0.2493 | 0.3338 | 0.1149 |
+| cooccur_freq | 0.2807 | 0.3491 | 0.1458 |
+| tfidf | 0.2839 | 0.3458 | 0.1091 |
+| pmi | 0.1904 | 0.3191 | 0.1730 |
+
+关键结论：
+- Recall@10 最优：`tfidf`（0.2839）——在本数据集上对覆盖（召回）效果最好；
+- MRR@10 最优：`cooccur_freq`（0.3491）——排序平均位置最好，说明简单频次在本场景能把更命中项排前；
+- 无缓存延时最优：`tfidf`（0.1091 ms），`compkey_current` 接近（0.1149 ms），均满足低延时在线查询需求。
+
+建议与适用场景：
+- 若侧重“扩大候选覆盖，提升召回”，优先采用 `tfidf`；
+- 若侧重“把最相关的候选排前（更好的一位命中）”，`cooccur_freq` 或者在 frequency 上加简单权重的方案是可行的选择；
+- `compkey_current` 保持了对 rarity 的考虑，适合对稀有但语义相关 token 给出一定权重的场景；若需要进一步提高召回，可尝试把 TF-IDF 与 current 方法做线性或排序融合（ensemble）。
+
+可复现说明（如何重跑实验）：
+1. 激活项目虚拟环境并在仓库根目录运行：
+
+```powershell
+.\\.venv\\Scripts\\Activate.ps1
+python .\\deliverables\\P3\\run_stage3_multimethod_benchmark.py
+```
+
+2. 结果会写入 `deliverables/P3/reports/`，文件名如上。请保留 `deliverables/P1/run_train_v2_full/tokenized_queries_v1.csv` 与 `seed_keywords_v1.csv` 以确保可复现。
