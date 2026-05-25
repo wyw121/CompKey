@@ -221,12 +221,21 @@ def main():
         print("[WARN] source tokenized CSV not found, skipping scale benchmarks")
         return
 
-    scales = [(100_000, "100k"), (1_000_000, "1M")]
+    # expanded scales for better trend analysis
+    scales = [
+        (10_000, "10k"),
+        (100_000, "100k"),
+        (300_000, "300k"),
+        (500_000, "500k"),
+        (1_000_000, "1M"),
+    ]
     from compkey_p3.offline_pipeline import build_offline_assets
     from compkey_p3.repository import CompKeyRepository
     from compkey_p3.database import DatabaseManager
 
     scale_results = []
+    scale_runs = []  # list of (label, target, run_idx, ms, summary)
+    runs_per_scale = 3
     for target, label in scales:
         tmp_csv = report_dir / f"tokenized_scaled_{label}.csv"
         print(f"building scaled tokenized CSV: {tmp_csv} tokens={target}")
@@ -236,29 +245,67 @@ def main():
         db_path = report_dir / f"compkey_scale_{label}.db"
         if db_path.exists():
             db_path.unlink()
-        dbm = DatabaseManager(db_path)
-        with dbm.connect() as conn:
-            dbm.initialize_schema(conn)
-            repo = CompKeyRepository(conn)
-            start = time.perf_counter()
-            summary = build_offline_assets(
-                repo,
-                seed_csv=settings.seed_csv,
-                tokenized_csv=tmp_csv,
-                word_freq_csv=settings.p1_output_dir / "word_freq_v1.csv",
-                seed_related_csv=settings.p1_output_dir / "seed_related_queries_v1.csv",
-                candidate_limit=50,
-            )
-            elapsed_ms = (time.perf_counter() - start) * 1000.0
-        scale_results.append((label, target, elapsed_ms, summary))
+        for run_idx in range(1, runs_per_scale + 1):
+            print(f"-- scale {label} run {run_idx}/{runs_per_scale}")
+            # use per-run DB filename to avoid Windows file-lock/unlink issues
+            db_path_run = report_dir / f"compkey_scale_{label}_run{run_idx}.db"
+            if db_path_run.exists():
+                try:
+                    db_path_run.unlink()
+                except Exception:
+                    # fall back to unique filename with timestamp
+                    import time as _time
+                    db_path_run = report_dir / f"compkey_scale_{label}_run{run_idx}_{int(_time.time())}.db"
+            dbm = DatabaseManager(db_path_run)
+            with dbm.connect() as conn:
+                dbm.initialize_schema(conn)
+                repo = CompKeyRepository(conn)
+                start = time.perf_counter()
+                summary = build_offline_assets(
+                    repo,
+                    seed_csv=settings.seed_csv,
+                    tokenized_csv=tmp_csv,
+                    word_freq_csv=settings.p1_output_dir / "word_freq_v1.csv",
+                    seed_related_csv=settings.p1_output_dir / "seed_related_queries_v1.csv",
+                    candidate_limit=50,
+                )
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+            scale_runs.append((label, target, run_idx, elapsed_ms, summary))
+        # compute aggregated summary from runs (use last summary for counts)
+        last_summary = scale_runs[-1][4]
+        # mean of ms across runs for this scale
+        ms_vals = [r[3] for r in scale_runs if r[0] == label]
+        mean_ms = float(sum(ms_vals) / len(ms_vals))
+        scale_results.append((label, target, mean_ms, last_summary))
 
     # write scale results
     scale_csv = report_dir / "p3_scale_benchmark.csv"
+    # write per-run CSV
+    runs_csv = report_dir / "p3_scale_benchmark_runs.csv"
+    with open(runs_csv, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["label", "target_tokens", "run_idx", "build_ms", "seed_count", "mediator_count", "competition_count", "search_log_count"]) 
+        for label, target, run_idx, ms, s in scale_runs:
+            writer.writerow([label, target, run_idx, f"{ms:.3f}", s.seed_count, s.mediator_count, s.competition_count, s.search_log_count])
+
+    # write aggregated CSV with mean/std/ci95
+    import math
+    from statistics import mean, stdev
+
     with open(scale_csv, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["label", "target_tokens", "build_ms", "seed_count", "mediator_count", "competition_count", "search_log_count"]) 
-        for label, target, ms, s in scale_results:
-            writer.writerow([label, target, f"{ms:.3f}", s.seed_count, s.mediator_count, s.competition_count, s.search_log_count])
+        writer.writerow(["label", "target_tokens", "build_ms_mean", "build_ms_std", "build_ms_ci95", "seed_count", "mediator_count", "competition_count", "search_log_count"]) 
+        for label, target, mean_ms, s in scale_results:
+            vals = [float(r[3]) for r in scale_runs if r[0] == label]
+            sd = float(stdev(vals)) if len(vals) > 1 else 0.0
+            # 95% CI for mean using t ~ 2.776 for n=3
+            if len(vals) > 1:
+                se = sd / math.sqrt(len(vals))
+                t_mult = 2.776  # t critical for df=2 ~ 95%
+                ci95 = se * t_mult
+            else:
+                ci95 = 0.0
+            writer.writerow([label, target, f"{mean_ms:.3f}", f"{sd:.3f}", f"{ci95:.3f}", s.seed_count, s.mediator_count, s.competition_count, s.search_log_count])
 
     md_scale = report_dir / "p3_scale_benchmark.md"
     with open(md_scale, "w", encoding="utf-8") as f:
@@ -267,6 +314,28 @@ def main():
         f.write("|---|---:|---:|---:|---:|---:|---:|\n")
         for label, target, ms, s in scale_results:
             f.write(f"| {label} | {target} | {ms:.1f} | {s.seed_count} | {s.mediator_count} | {s.competition_count} | {s.search_log_count} |\n")
+
+        f.write("\n## 补充观察\n\n")
+        # collect numeric vectors
+        targets = [int(r[1]) for r in scale_results]
+        times = [float(r[2]) for r in scale_results]
+        if len(targets) < 2:
+            f.write("- 样本点太少，无法判断规模与耗时关系。\n")
+        else:
+            import numpy as _np
+            x = _np.array(targets, dtype=float)
+            y = _np.array(times, dtype=float)
+            # linear fit y = a*x + b
+            a, b = _np.polyfit(x, y, 1)
+            y_pred = a * x + b
+            # R^2
+            ss_res = _np.sum((y - y_pred) ** 2)
+            ss_tot = _np.sum((y - _np.mean(y)) ** 2)
+            r2 = 1.0 - ss_res / ss_tot if ss_tot != 0 else 0.0
+            f.write(f"- 从 `{scale_results[0][0]}` 到 `{scale_results[-1][0]}`，token 数增加约 {_np.round(x[-1]/x[0],1)} 倍，构建耗时由 {y[0]:.1f} ms 增到 {y[-1]:.1f} ms。\n")
+            f.write(f"- 线性拟合（build_ms = a * tokens + b）得到：a = {a:.6e} ms/token, b = {b:.3f} ms，拟合决定系数 R² = {r2:.4f}。\n")
+            f.write(f"- 平均归一化（ms/token）范围：{(y/x).min():.6e} - {(y/x).max():.6e} ms/token，说明单位 token 成本随规模有一定波动。\n")
+        f.write("- 产物计数在各规模点上保持一致，说明这里测到的主要是**构建成本**，不是结构复杂度的变化。\n")
 
     print(f"[OK] scale benchmark written: {scale_csv}")
 

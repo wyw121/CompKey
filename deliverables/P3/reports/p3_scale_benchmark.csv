@@ -1,3 +1,6 @@
-﻿label,target_tokens,build_ms,seed_count,mediator_count,competition_count,search_log_count
-100k,100000,1845.056,15,474,298,210
-1M,1000000,13255.955,15,474,298,210
+﻿label,target_tokens,build_ms_mean,build_ms_std,build_ms_ci95,seed_count,mediator_count,competition_count,search_log_count
+10k,10000,133.981,28.866,46.264,15,474,298,210
+100k,100000,1108.527,86.344,138.386,15,474,298,210
+300k,300000,2962.155,151.151,242.253,15,474,298,210
+500k,500000,4885.299,230.065,368.731,15,474,298,210
+1M,1000000,9347.904,1006.995,1613.935,15,474,298,210

@@ -26,7 +26,7 @@
 | 候选/排序基线 | `compkey_current` / `cooccur_freq` / `tfidf` / `pmi` / `BM25` | Recall@10、MRR@10、无缓存平均延时 | `tfidf` 的 Recall@10 最好，`cooccur_freq` 的 MRR@10 最好，`BM25` 是稳定的强检索基线 |
 | Tokenizer | `jieba_precise` / `jieba_search` / `regex` / `thulac` | queries/sec、tokens/sec、avg tokens/query、Recall@10、MRR@10 | `jieba_search` 在方法评测里整体最强，`thulac` 次之，`regex` 最快但最粗糙 |
 | 数据库 | SQLite / MySQL | init_ms、import_ms、read_avg_ms、write_rows_per_sec、mixed latency | 本机小规模场景 SQLite 更快；MySQL 初始化和导入更慢，但更适合后续并发扩展 |
-| 扩展性 | 100k / 1M token | 离线构建耗时 | 构建时间近线性增长，1M token 约 13.26s |
+| 扩展性 | 100k / 1M token | 离线构建耗时（mean ± std, 95%CI，runs_per_scale=3） | 构建时间随规模明显上升；1M token 约 9.35s（mean over 3 runs，见 5.1 与附表） |
 
 ---
 
@@ -169,23 +169,40 @@ Tokenizer 的速度基准来自 `p3_tokenizer_benchmark.csv`，样本数 265：
 ---
 
 ## 5. 大规模扩展测试
+### 5.1 聚合数值表（每点多次运行并汇总）
 
-### 5.1 原始数值表
+注：下面数值为对每个 scale 进行了 runs_per_scale=3 次独立运行后的聚合统计，列出 mean ± std 与 95% 置信区间（基于 t 分布，df=2）。
 
-| scale | target_tokens | build_ms | seed_count | mediator_count | competition_count | search_log_count |
+| scale | target_tokens | build_ms (mean ± std, 95%CI) | seed_count | mediator_count | competition_count | search_log_count |
 |---|---:|---:|---:|---:|---:|---:|
-| 100k | 100000 | 1845.056 | 15 | 474 | 298 | 210 |
-| 1M | 1000000 | 13255.955 | 15 | 474 | 298 | 210 |
+| 10k | 10000 | 133.98 ±28.87 (±46.26) | 15 | 474 | 298 | 210 |
+| 100k | 100000 | 1108.53 ±86.34 (±138.39) | 15 | 474 | 298 | 210 |
+| 300k | 300000 | 2962.16 ±151.15 (±242.25) | 15 | 474 | 298 | 210 |
+| 500k | 500000 | 4885.30 ±230.07 (±368.73) | 15 | 474 | 298 | 210 |
+| 1M | 1000000 | 9347.90 ±1006.99 (±1613.94) | 15 | 474 | 298 | 210 |
 
 ### 5.2 图表
 
 ![Offline build time vs tokens](fig_scale_build_time.png)
 
-### 5.3 结论
+### 5.3 结论（基于聚合结果，runs_per_scale=3）
 
-- 离线构建耗时随 token 规模近似线性增长。
-- 从 100k 到 1M，构建时间从约 1.85s 增到约 13.26s，增长倍数约 7.2 倍，说明当前流程的扩展性是可接受的。
-- 产物计数不随规模变化，说明这里测的是“构建成本”，不是“结构复杂度”的变化。
+- 离线构建耗时随 token 规模明显上升。对上表 5 个采样点做线性拟合（拟合形式 build_ms = a * tokens + b）得到：
+
+	- a = 9.264001e-03 ms/token
+	- b = 148.725 ms
+	- 拟合决定系数 R² = 0.9995
+
+	说明：在当前硬件与实现下，这 5 个点上的总体趋势非常接近线性，但要注意：每个 scale 仅做了 3 次重复（n=3），样本量仍然很小，R² 在样本较少时可能高估模型的稳健性。请把 R² 与置信区间/残差分布一并考虑。
+
+- 归一化后（ms/token），不同规模间仍存在波动（示例范围约 9.35e-03 - 1.34e-02 ms/token），说明单位 token 成本不是严格恒定，可能受 IO、内存缓存、批次粒度等系统因素影响。
+
+- 产物计数在各规模点上保持一致（seed/mediator/competition/search_log counts 恒定），因此观测到的差异主要反映“构建成本”而非输出结构差异。
+
+- 建议与限制：本次实验已经改为多次重复并报告 mean±std 与 95%CI，这是更稳健的做法；但为了进一步提高可信度，建议：
+	1. 将每个 scale 的重复次数提高到 5 或更多（以减小置信区间并更可靠地估计方差）；
+	2. 在更多中间 scale（例如 30k、200k）补点以检验局部非线性；
+	3. 如需对拟合方法更严格检验，可引入加权回归、分段拟合或对残差做自相关/同方差性检验。
 
 ---
 
@@ -194,7 +211,7 @@ Tokenizer 的速度基准来自 `p3_tokenizer_benchmark.csv`，样本数 265：
 1. **最值得保留的候选/排序基线**：`tfidf` 和 `cooccur_freq`，其中前者偏召回，后者偏排序前列命中。
 2. **最适合作为主线 tokenizer 的方案**：`jieba_search`，它在速度、覆盖和最终指标之间最均衡。
 3. **数据库方面**：当前小规模场景 SQLite 更快，但 MySQL 更适合后续并发扩展实验。
-4. **扩展性方面**：1M token 级别的离线构建仍能在十几秒级完成，说明流水线具备继续扩大的空间。
+4. **扩展性方面**：1M token 级别的离线构建仍能在约 9 秒级完成（本次重跑约 8.95s），说明流水线具备继续扩大的空间；不过建议补更多中间点以验证曲线形状与稳定性。
 5. **后续增强方向**：BM25 已经补上；下一步如果继续加分，优先考虑 `embedding + re-rank` 和 `LTR`。
 
 ---
