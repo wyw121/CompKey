@@ -90,21 +90,18 @@ def plot_tokenizer_speed(rows_speed, out_path: Path):
 
 
 def plot_scale_curve(rows_scale, out_path: Path):
-    # rows_scale has label,target_tokens,build_ms_mean,build_ms_std,build_ms_ci95,...
+    # rows_scale has label,target_tokens,build_ms_mean,build_ms_std,...
     labels = [r["label"] for r in rows_scale]
     targets = [int(r["target_tokens"]) for r in rows_scale]
     times = [float(r.get("build_ms_mean") or r.get("build_ms") or 0.0) for r in rows_scale]
     stds = [float(r.get("build_ms_std") or 0.0) for r in rows_scale]
-    ci95 = [float(r.get("build_ms_ci95") or 0.0) for r in rows_scale]
-    yerr = ci95 if any(v > 0 for v in ci95) else stds
-    yerr_label = "95% CI" if any(v > 0 for v in ci95) else "std"
 
     fig, ax = plt.subplots(figsize=(6, 4))
-    ax.errorbar(targets, times, yerr=yerr, fmt="-o", capsize=4, color="#1f77b4", ecolor="#1f77b4", elinewidth=1.2)
+    ax.errorbar(targets, times, yerr=stds, fmt="-o", capsize=4)
     ax.set_xscale("log")
     ax.set_xlabel("target tokens (log scale)")
     ax.set_ylabel("build ms")
-    ax.set_title("Offline build time vs tokens (mean ± 95% CI)")
+    ax.set_title("Offline build time vs tokens")
     for x, y in zip(targets, times):
         ax.text(x, y, f"{y:.0f}ms", fontsize=8, ha="left", va="bottom")
     # compute and plot linear fit (in original scale) and annotate R^2
@@ -115,29 +112,8 @@ def plot_scale_curve(rows_scale, out_path: Path):
         a, b = _np.polyfit(x, y, 1)
         x_line = _np.linspace(x.min(), x.max(), 200)
         y_line = a * x_line + b
-        ax.plot(x_line, y_line, linestyle="--", color="#666666", label=f"linear fit R²={_np.round(1 - _np.sum((y - (a * x + b))**2) / _np.sum((y - y.mean())**2), 3)}")
+        ax.plot(x_line, y_line, linestyle="--", color="#888888", label=f"linear fit R²={_np.round(1 - _np.sum((y - (a * x + b))**2) / _np.sum((y - y.mean())**2), 3)}")
         ax.legend(fontsize=8)
-        ax.text(
-            0.03,
-            0.03,
-            f"error bars = {yerr_label}; runs_per_scale=3",
-            transform=ax.transAxes,
-            fontsize=8,
-            va="bottom",
-            ha="left",
-            bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.8, edgecolor="#bbbbbb"),
-        )
-        if len(targets) <= 3:
-            ax.text(
-                0.03,
-                0.97,
-                "Few sampled points; fit may be unreliable",
-                transform=ax.transAxes,
-                fontsize=8,
-                va="top",
-                ha="left",
-                bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.8, edgecolor="#bbbbbb"),
-            )
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
