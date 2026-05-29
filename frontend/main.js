@@ -1,11 +1,47 @@
 const API_BASE = 'http://127.0.0.1:8000'
+const SOURCE_STORAGE_KEY = 'compkeyDemoSource';
+
+function getSelectedSource() {
+  return localStorage.getItem(SOURCE_STORAGE_KEY) || 'edgar';
+}
+
+function setSelectedSource(source) {
+  localStorage.setItem(SOURCE_STORAGE_KEY, source);
+}
+
+function getSourceLabel(source) {
+  return source === 'aol' ? 'AOL demo' : 'EDGAR demo';
+}
+
+function updateSourceUi() {
+  const select = document.getElementById('demoSource');
+  if (!select) return;
+  const current = getSelectedSource();
+  select.value = current;
+  const label = document.getElementById('currentSourceLabel');
+  if (label) label.textContent = getSourceLabel(current);
+}
+
+function bindSourceSelector(onChange) {
+  const select = document.getElementById('demoSource');
+  if (!select) return;
+  select.value = getSelectedSource();
+  select.addEventListener('change', async () => {
+    setSelectedSource(select.value);
+    updateSourceUi();
+    if (typeof onChange === 'function') {
+      await onChange(select.value);
+    }
+  });
+}
 
 async function loadQuickSeeds() {
   const box = document.getElementById('quickSeeds');
   if (!box) return;
   box.innerHTML = '<span style="color:#888">加载中...</span>';
   try {
-    const res = await fetch(`${API_BASE}/seed_suggestions?limit=12`);
+    const source = getSelectedSource();
+    const res = await fetch(`${API_BASE}/seed_suggestions?limit=12&source=${encodeURIComponent(source)}`);
     if (!res.ok) {
       const txt = await res.text();
       box.innerHTML = `<span style="color:#b91c1c">快捷热词加载失败：${escapeHtml(txt || res.statusText)}</span>`;
@@ -68,7 +104,8 @@ async function runSearch(seedOverride) {
   const seed = (seedOverride ?? document.getElementById('seedInput').value).trim();
   if (!seed) return showError('请输入种子词后再查询。');
   try {
-    const res = await fetch(`${API_BASE}/recommend?seed=${encodeURIComponent(seed)}&top=20`);
+    const source = getSelectedSource();
+    const res = await fetch(`${API_BASE}/recommend?seed=${encodeURIComponent(seed)}&top=20&source=${encodeURIComponent(source)}`);
     if (!res.ok) {
       const txt = await res.text();
       return showError(`查询失败（HTTP ${res.status}）：${txt || res.statusText}`);
@@ -106,7 +143,8 @@ async function showTrend(keyword) {
   clearError();
   let data;
   try {
-    const res = await fetch(`${API_BASE}/trend?keyword=${encodeURIComponent(keyword)}&days=90`);
+    const source = getSelectedSource();
+    const res = await fetch(`${API_BASE}/trend?keyword=${encodeURIComponent(keyword)}&days=90&source=${encodeURIComponent(source)}`);
     if (!res.ok) {
       const txt = await res.text();
       return showError(`趋势请求失败（HTTP ${res.status}）：${txt || res.statusText}`);
@@ -142,4 +180,10 @@ function escapeHtml(s) {
   return (s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+bindSourceSelector(async () => {
+  updateSourceUi();
+  document.getElementById('results').innerHTML = '';
+  await loadQuickSeeds();
+});
+updateSourceUi();
 loadQuickSeeds();

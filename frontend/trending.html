@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CompKey - Sogou 历史热词</title>
+  <title>CompKey - 热词榜单（Demo）</title>
   <link rel="icon" type="image/svg+xml" href="/frontend/favicon.svg" />
   <style>
     body { font-family: Arial, Helvetica, sans-serif; margin: 20px }
@@ -15,7 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
 </head>
 <body>
-  <h2>Sogou 历史热词</h2>
+  <h2>热词榜单（Demo）</h2>
   <div class="muted" style="margin-bottom:12px;line-height:1.6">
     <div>数据来源：<span id="dataSource">等待加载...</span></div>
     <div>时间范围：<span id="dataRange">等待加载...</span></div>
@@ -25,6 +25,13 @@
     <a href="/frontend/index.html">关键词推荐</a>
     |
     <a href="/frontend/trending.html">时下流行关键词</a>
+    |
+    <label style="margin-left:8px">Demo 源：
+      <select id="demoSource">
+        <option value="edgar">EDGAR demo</option>
+        <option value="aol">AOL demo</option>
+      </select>
+    </label>
   </div>
 
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">

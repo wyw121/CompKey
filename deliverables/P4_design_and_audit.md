@@ -120,37 +120,75 @@ CREATE TABLE IF NOT EXISTS keyword_stats (
 
 请选择你希望我下一步实现哪个模块（或允许我按里程碑顺序开始实现：算法实现 → 离线管道 → DB schema 增补 → API → 前端 demo）。
 
-## 9 外部热榜接入：成熟系统通常怎么做
-针对“新来源字段不一致、数据类型不一致、字段名不一致”的情况，较成熟的做法一般是三层：
+## 9 公开搜索日志数据源筛选：成熟系统通常怎么做
+当用户真正需要的是“可下载、近些年、像搜索日志”的公开数据时，成熟系统的做法不是强行找一个完美同构的数据集，而是先分三类：
 
-1. **Raw 层**：按来源单独保存原始快照，不做强行统一。
-  - 例如本次实验把百度 / 知乎 / 微博分别落到 `data/external_trending/captures/`。
-2. **Normalized/Staging 层**：给每个来源做字段映射，统一成 canonical schema。
-  - 本次统一成 `keyword,date,freq,uniq_users,source,source_rank,raw_heat,raw_heat_unit`。
-  - 这样即使标题/热度格式不同，也只在各自适配器里处理，不会污染主流程。
-3. **Curated 层**：把已经标准化的多源数据合并为系统真正消费的最小字段集。
-  - 本次输出 `data/external_trending/merged/keyword_date_counts.csv`，直接兼容现有增量入库脚本。
+1. **原生搜索日志类**：保留 query / session / click / timestamp 等核心字段，最适合复用旧 pipeline。
+2. **门户/站内检索日志类**：更“新”，通常官方可下载，但字段语义会偏访问/站内搜索，不一定有完整的 session 结构。
+3. **研究型补充数据**：可以补足实验规模，但不应被当成主数据源。
 
-这样做的好处：
-- 出错时能定位到具体来源，而不是“全局数据坏了”。
-- 新来源可以独立测试，不会影响旧 Sogou 语料。
-- 如果未来要接入更多来源，只需要增加一个 adapter，而不是改整条主链路。
+### 候选源对比
+
+- **SEC EDGAR Log File Data Sets（推荐作为“最近公开数据”的主候选）**
+  - 官方提供 2020-05-19 到 2025-06-30 的日志文件，格式为按日下载的 ZIP/CSV。
+  - 优点：近、公开、可下载、官方来源稳定。
+  - 适合：做“最近一段时间的搜索/检索日志”实验，作为新数据输入旧流程前的测试样本。
+  - 局限：它更像站内检索/访问日志，不一定和经典搜索引擎日志完全同构。
+
+- **Jeff Huang 的 Web Search Query Log Downloads（推荐作为“经典搜索日志”对照）**
+  - 包含 AOL 2006、MSN 2006/2007、Sogou 2008、Yandex 2009 等。
+  - 优点：更接近传统搜索日志语义，常见字段包括 user/session/click/query。
+  - 局限：年份较早，不满足“较新数据”的要求；但非常适合做对照实验和兼容性回归。
+
+- **AOL User Session Collection（本次已验证可匿名下载的经典 query log）**
+  - McGill 镜像可直接访问，文件包含 `AnonID / Query / QueryTime / ItemRank / ClickURL`。
+  - 优点：字段最贴近本项目的 query/session/time/click 需求，且无需登录即可下载样本。
+  - 局限：年份较老，但作为“经典查询日志”主对照非常合适。
+
+- **archive-query-log（更适合作为补充研究工具）**
+  - 目标更偏向从网络档案中挖掘搜索结果页/查询痕迹。
+  - 优点：研究味道浓，适合补充实验。
+  - 局限：它不是最标准的“下载即用搜索日志”，更像工具或研究项目。
+
+### 推荐结论
+
+如果你的目标是：
+
+- **“最近几年 + 官方可下载 + 能跑本地实验”** → 先选 **SEC EDGAR**。
+- **“最像经典搜索引擎日志 + 可做兼容性对照”** → 优先用 **AOL**，再扩展到 **Sogou / MSN / Yandex** 这类老日志做 benchmark。
+- **“想再补一个研究型数据源”** → 再考虑 **archive-query-log**。
+
+### 隔离接入建议
+
+对新日志不要直接混进旧目录或旧库，建议固定成下面这种结构：
+
+- `data/source_logs/<source_name>/raw/`：原始下载文件
+- `data/source_logs/<source_name>/normalized/`：统一后的 canonical CSV
+- `data/source_logs/<source_name>/manifest.json`：字段映射、下载日期、版本、来源说明
+- `compkey_<source_name>.sqlite3`：单独 demo 数据库
+
+统一字段建议至少保留：
+
+- `event_time`
+- `query_text`
+- `user_id` 或 `session_id`
+- `clicked_url`（如果有）
+- `source`
+- `raw_line` 或 `raw_payload`
+
+这样做的好处是：
+
+- 旧 Sogou 数据与新来源完全隔离，不会互相污染。
+- 每个来源只需要写一个 adapter/mapping，不用改整条主流程。
+- 先在独立 demo 库里跑通，再决定是否纳入主库。
 
 ## 10 本次本地验证结论
-- 外部热榜来源：`今日热榜` 聚合页中的 **百度实时热点**、**知乎热榜**、**微博热搜榜**。
-- 本地分层测试：每个来源取 10 条，合计 30 条合并记录。
-- 结果文件：
-  - `data/external_trending/captures/*.txt`
-  - `data/external_trending/normalized/*.csv`
-  - `data/external_trending/merged/keyword_date_counts.csv`
-  - `data/external_trending/merged/ingest_report.json`
-- demo 数据库：`compkey_trend_demo.sqlite3`
-- demo API 验证：
-  - `/hot_keywords` 可以直接读到新库中的热点词，返回的 `source` 已切换为 `今日热榜（百度/知乎/微博聚合）`。
-  - `/trend` 可以直接查询单个关键词，并返回时间序列。
+- 现阶段结论不是“热榜接入”，而是：**公开搜索日志的最佳近期候选是 SEC EDGAR，经典 query log 的最佳可下载候选是 AOL**。
+- 下一步如果要落地，建议先下载 **1 天的 AOL 样本**，把它映射成 canonical CSV，再跑一遍现有 P1/P3 处理链路，验证字段兼容性和隔离策略；EDGAR 则保留为“较新公开数据”的补充基线。
+- 当前仓库里已有的热榜 demo 仍然保留，但它属于误判分支，只能作为“独立多源数据接入”的工程示例，不能替代搜索日志任务本身。
 
 结论：
-> 新数据源可以以“独立快照 → 标准化 → 合并层 → 独立 demo 库”的方式接入，现有入库脚本与 API 兼容良好；同时旧数据集没有被覆盖，分离策略是有效的。
+> 对你现在这个题目，最稳妥的路线是“**AOL 作为经典 query log 主线 + SEC EDGAR 作为近期公开补充 + 新旧数据完全隔离 + 先在独立 demo 库验证**”。这样既符合课程实验可落地，也不会把老数据体系弄脏。
 
 ---
-（审计基于仓库内文件：`deliverables/P1/*`, `deliverables/P3/*`, `数据分析与商务智能数据/搜索日志/*` 的抽样检查；若需我直接读取大文件进行完整统计（行数/时间分布/Top-k 词频），我可以运行增量读取脚本并输出统计结果。）
+（审计基于仓库内文件：`deliverables/P1/*`, `deliverables/P3/*`, `数据分析与商务智能数据/搜索日志/*` 的抽样检查；若你希望，我下一步可以直接把 **EDGAR → canonical CSV** 的小型适配器脚本补出来，再配一个独立 demo 库导入流程。）

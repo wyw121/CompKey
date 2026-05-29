@@ -16,10 +16,20 @@
 </head>
 <body>
   <h2>竞争性关键词推荐（Demo）</h2>
+  <div class="muted" style="margin-bottom:8px;color:#666;font-size:13px">
+    当前数据源：<span id="currentSourceLabel">EDGAR demo</span>
+  </div>
   <div style="margin-bottom:10px">
     <a href="/frontend/index.html">关键词推荐</a>
     |
     <a href="/frontend/trending.html">时下流行关键词</a>
+    |
+    <label style="margin-left:8px">Demo 源：
+      <select id="demoSource">
+        <option value="edgar">EDGAR demo</option>
+        <option value="aol">AOL demo</option>
+      </select>
+    </label>
   </div>
   <div>
     <input id="seedInput" placeholder="输入种子词，例如: 苹果 手机" style="width:300px;padding:6px" />

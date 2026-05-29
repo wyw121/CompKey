@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import sqlite3
 import yaml
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import re
 
@@ -41,6 +41,20 @@ def normalize_token(token: str) -> str:
     return s
 
 CONFIG_PATH_DEFAULT = os.path.join(os.path.dirname(__file__), '..', 'config', 'competition_params.yaml')
+APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+DEFAULT_DEMO_SOURCES = {
+    'edgar': {
+        'label': 'EDGAR demo',
+        'description': '近年公开检索/访问日志',
+        'db_path': './compkey_demo.sqlite3',
+    },
+    'aol': {
+        'label': 'AOL demo',
+        'description': '经典 query log（用户会话集合）',
+        'db_path': './compkey_aol_demo.sqlite3',
+    },
+}
 
 
 app = FastAPI(title='CompKey API')
@@ -75,10 +89,52 @@ def get_param(name: str, default):
     return cfg.get(name, default)
 
 
-def get_db_conn():
+def project_path(path: str) -> str:
+    if not path:
+        return path
+    if os.path.isabs(path):
+        return path
+    return os.path.abspath(os.path.join(APP_ROOT, path))
+
+
+def get_demo_source_configs() -> Dict[str, Dict[str, str]]:
     cfg = load_config()
-    dbp = cfg.get('db_path', './compkey_p4.sqlite3')
-    conn = sqlite3.connect(dbp)
+    demo_sources = cfg.get('demo_sources')
+    resolved = dict(DEFAULT_DEMO_SOURCES)
+    if isinstance(demo_sources, dict):
+        for key, value in demo_sources.items():
+            if not isinstance(value, dict):
+                continue
+            merged = dict(resolved.get(key, {}))
+            merged.update({k: v for k, v in value.items() if v is not None})
+            resolved[key] = merged
+    return resolved
+
+
+def normalize_demo_source(source: Optional[str]) -> str:
+    cfg = load_config()
+    default_source = str(cfg.get('default_demo_source', 'edgar')).strip().lower() or 'edgar'
+    key = str(source or default_source).strip().lower()
+    configs = get_demo_source_configs()
+    if key not in configs:
+        return default_source if default_source in configs else 'edgar'
+    return key
+
+
+def get_demo_source_profile(source: Optional[str]) -> Dict[str, str]:
+    key = normalize_demo_source(source)
+    configs = get_demo_source_configs()
+    profile = dict(configs.get(key, DEFAULT_DEMO_SOURCES['edgar']))
+    profile['source'] = key
+    profile['label'] = profile.get('label') or key
+    profile['description'] = profile.get('description') or ''
+    profile['db_path'] = project_path(profile.get('db_path', './compkey_p4.sqlite3'))
+    return profile
+
+
+def get_db_conn(source: Optional[str] = None):
+    profile = get_demo_source_profile(source)
+    conn = sqlite3.connect(profile['db_path'])
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -104,12 +160,42 @@ class SeedSuggestionItem(BaseModel):
     best_competition: float
 
 
+class DemoSourceItem(BaseModel):
+    source: str
+    label: str
+    description: str
+    db_exists: bool
+
+
+class DemoSourceList(BaseModel):
+    default_source: str
+    items: List[DemoSourceItem]
+
+
+@app.get('/sources', response_model=DemoSourceList)
+def demo_sources():
+    cfg = load_config()
+    default_source = normalize_demo_source(cfg.get('default_demo_source', 'edgar'))
+    items = []
+    for key, profile in get_demo_source_configs().items():
+        db_path = project_path(profile.get('db_path', ''))
+        items.append(
+            DemoSourceItem(
+                source=key,
+                label=profile.get('label', key),
+                description=profile.get('description', ''),
+                db_exists=os.path.exists(db_path),
+            )
+        )
+    return DemoSourceList(default_source=default_source, items=items)
+
+
 @app.get('/recommend', response_model=List[RecommendItem])
-def recommend(seed: str, top: int = 20):
+def recommend(seed: str, top: int = 20, source: str = 'edgar'):
     if not seed:
         raise HTTPException(status_code=400, detail='seed required')
     min_freq = int(get_param('min_freq', 5))
-    conn = get_db_conn()
+    conn = get_db_conn(source)
     cur = conn.cursor()
     cur.execute('SELECT candidate,competition,freq,pmi FROM competition_result WHERE seed=? ORDER BY competition DESC LIMIT ?', (seed, top))
     rows = cur.fetchall()
@@ -134,10 +220,11 @@ def recommend(seed: str, top: int = 20):
 
 
 @app.get('/trend')
-def trend(keyword: str, days: int = 90):
+def trend(keyword: str, days: int = 90, source: str = 'edgar'):
     if not keyword:
         raise HTTPException(status_code=400, detail='keyword required')
-    conn = get_db_conn()
+    profile = get_demo_source_profile(source)
+    conn = get_db_conn(profile['source'])
     cur = conn.cursor()
     cur.execute('SELECT date,freq FROM keyword_timeseries WHERE keyword=? ORDER BY date DESC LIMIT ?', (keyword, days))
     rows = cur.fetchall()
@@ -161,11 +248,18 @@ def trend(keyword: str, days: int = 90):
     # 若完全没有可用时间戳数据，明确告知前端，不返回伪时间轴
     has_time_data = bool(rows)
     note = '' if has_time_data else '该关键词暂无可解析时间戳数据，无法绘制真实时间轴。'
-    return {'keyword': keyword, 'series': series if has_time_data else [], 'has_time_data': has_time_data, 'note': note}
+    return {
+        'keyword': keyword,
+        'series': series if has_time_data else [],
+        'has_time_data': has_time_data,
+        'note': note,
+        'source': profile['source'],
+        'source_label': profile['label'],
+    }
 
 
 @app.get('/hot_keywords')
-def hot_keywords(limit: int = 20, window_days: int = 7):
+def hot_keywords(limit: int = 20, window_days: int = 7, source: str = 'edgar'):
     """
     返回“时下流行”关键词榜单：按最近 window_days 相比前一窗口的增长率排序。
     """
@@ -177,7 +271,8 @@ def hot_keywords(limit: int = 20, window_days: int = 7):
     min_freq = int(get_param('min_freq', 5))
     growth_smoothing = int(get_param('growth_smoothing', max(min_freq, 5)))
 
-    conn = get_db_conn()
+    profile = get_demo_source_profile(source)
+    conn = get_db_conn(profile['source'])
     cur = conn.cursor()
 
     cur.execute('SELECT MAX(date) AS max_date FROM keyword_timeseries')
@@ -228,7 +323,8 @@ def hot_keywords(limit: int = 20, window_days: int = 7):
 
     return {
         'items': items[:limit],
-        'source': get_param('hot_source_label', 'Sogou 原始日志重建'),
+        'source': profile['label'],
+        'source_key': profile['source'],
         'date_range': {
             'start': recent_start.isoformat(),
             'end': end_date.isoformat(),
@@ -238,10 +334,10 @@ def hot_keywords(limit: int = 20, window_days: int = 7):
 
 
 @app.get('/seed_suggestions', response_model=List[SeedSuggestionItem])
-def seed_suggestions(limit: int = 12):
+def seed_suggestions(limit: int = 12, source: str = 'edgar'):
     if limit <= 0:
         raise HTTPException(status_code=400, detail='limit must be positive')
-    conn = get_db_conn()
+    conn = get_db_conn(source)
     cur = conn.cursor()
     cur.execute(
         '''

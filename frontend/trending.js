@@ -1,4 +1,35 @@
 const API_BASE = 'http://127.0.0.1:8000';
+const SOURCE_STORAGE_KEY = 'compkeyDemoSource';
+
+function getSelectedSource() {
+  return localStorage.getItem(SOURCE_STORAGE_KEY) || 'edgar';
+}
+
+function setSelectedSource(source) {
+  localStorage.setItem(SOURCE_STORAGE_KEY, source);
+}
+
+function getSourceLabel(source) {
+  return source === 'aol' ? 'AOL demo' : 'EDGAR demo';
+}
+
+function updateSourceUi() {
+  const select = document.getElementById('demoSource');
+  if (select) select.value = getSelectedSource();
+}
+
+function bindSourceSelector(onChange) {
+  const select = document.getElementById('demoSource');
+  if (!select) return;
+  select.value = getSelectedSource();
+  select.addEventListener('change', async () => {
+    setSelectedSource(select.value);
+    updateSourceUi();
+    if (typeof onChange === 'function') {
+      await onChange(select.value);
+    }
+  });
+}
 
 function showError(message) {
   const box = document.getElementById('errorBox');
@@ -29,7 +60,8 @@ async function loadHotKeywords() {
   const limit = Number(document.getElementById('limit').value);
   const windowDays = Number(document.getElementById('windowDays').value);
   try {
-    const url = `${API_BASE}/hot_keywords?limit=${limit}&window_days=${windowDays}`;
+    const source = getSelectedSource();
+    const url = `${API_BASE}/hot_keywords?limit=${limit}&window_days=${windowDays}&source=${encodeURIComponent(source)}`;
     const res = await fetch(url);
     if (!res.ok) {
       const txt = await res.text();
@@ -38,7 +70,7 @@ async function loadHotKeywords() {
     const payload = await res.json();
     const items = Array.isArray(payload) ? payload : (payload.items || []);
     renderHotList(items, windowDays);
-    const source = Array.isArray(payload) ? 'Sogou 原始日志重建' : (payload.source || 'Sogou 原始日志重建');
+    const source = Array.isArray(payload) ? getSourceLabel(getSelectedSource()) : (payload.source || getSourceLabel(getSelectedSource()));
     const range = Array.isArray(payload)
       ? '未知'
       : `${payload.date_range?.start || '未知'} ~ ${payload.date_range?.end || '未知'}`;
@@ -83,7 +115,8 @@ function renderHotList(items, windowDays) {
 async function showTrend(keyword) {
   clearError();
   try {
-    const res = await fetch(`${API_BASE}/trend?keyword=${encodeURIComponent(keyword)}&days=90`);
+    const source = getSelectedSource();
+    const res = await fetch(`${API_BASE}/trend?keyword=${encodeURIComponent(keyword)}&days=90&source=${encodeURIComponent(source)}`);
     if (!res.ok) {
       const txt = await res.text();
       return showError(`趋势请求失败（HTTP ${res.status}）：${txt || res.statusText}`);
@@ -112,4 +145,9 @@ function escapeHtml(s) {
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadHotKeywords);
+bindSourceSelector(async () => {
+  updateSourceUi();
+  await loadHotKeywords();
+});
+updateSourceUi();
 loadHotKeywords();

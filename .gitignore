@@ -9,6 +9,7 @@ __pycache__/
 
 # Large raw datasets (keep local, don't track)
 数据分析与商务智能数据/
+data/source_logs/
 
 # Optional temporary outputs
 *.log
