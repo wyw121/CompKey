@@ -6,6 +6,8 @@
 
 ## 2. 总体结构
 
+![image-20260525161623552](C:\Users\wywyw\AppData\Roaming\Typora\typora-user-images\image-20260525161623552.png)
+
 ```mermaid
 flowchart LR
     A[数据层\nP1/P2 输出 CSV] --> B[数据处理层\n清洗/聚合/统计]
@@ -23,10 +25,12 @@ flowchart LR
 
 来源于前两阶段的 CSV 文件：
 
-- `seed_keywords_v1.csv`
+- `seed_keywords_v1.csv`（P1 阶段人工整理的控制种子表，15 个 seed，包含 domain / reason / owner 字段）
 - `tokenized_queries_v1.csv`
 - `word_freq_v1.csv`
 - `seed_related_queries_v1.csv`
+
+其中，`seed_keywords_v1.csv` 不是从日志自动抽取出来的结果，而是项目预先定义的 seed 集合，用来驱动离线统计、推荐排序和横向评估，保证实验口径一致。
 
 ### 3.2 数据处理层
 
@@ -96,3 +100,14 @@ flowchart LR
 - 性能基准脚本
 
 不在第三阶段强行追求复杂 UI，以免把工程重点带偏。
+
+## 7. 与实验要求的对应关系
+
+第三阶段 3.3 要求的四项内容，本系统都已经覆盖：
+
+- **软件系统概述**：见 `SRS_v1.md` 与 `reports/p3_final_summary.md`。
+- **软件系统结构设计**：见本文档的分层结构与离线/在线分离设计。
+- **功能模块设计**：见 `module_design_v1.md`。
+- **数据库设计**：见 `db_schema_v1.sql` 与 `db_dictionary_v1.csv`。
+
+因此，本阶段的 benchmark 与横向对比不是“额外偏题内容”，而是用来证明上述系统设计在真实数据上可运行、可比较、可扩展的支撑材料。

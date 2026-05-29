@@ -1,0 +1,13 @@
+{
+  "log_files_used": 30,
+  "total_lines": 21426941,
+  "parsed_lines": 21426939,
+  "keyword_hits": 3259106,
+  "timeseries_rows": 8156,
+  "distinct_keywords": 333,
+  "date_range": {
+    "min": "2006-08-01",
+    "max": "2006-08-31"
+  },
+  "created_at": "2026-05-29T07:33:15.973389Z"
+}

@@ -19,7 +19,20 @@
 | 推荐缓存命中平均耗时(ms) | 0.001 |
 | 端到端总耗时(ms) | 175.123 |
 
-## 3. 当前版本的优化建议
+## 3. 模块级拆分说明
+
+这部分是把总耗时拆成更容易理解的模块，数据均来自 `run_stage3_benchmark.py` 的真实运行结果。
+
+| 模块 | 说明 | 数值(ms) |
+|---|---|---:|
+| schema 初始化 | `DatabaseManager.initialize_schema` | 41.648 |
+| 离线构建/导入 | `build_offline_assets(...)` 写入 SQLite | 114.985 |
+| seed 查询 | `CompKeyRepository.fetch_results_for_seed(...)` | 0.068 |
+| 推荐冷启动 | `RecommendationService.recommend(..., use_cache=False)` | 0.103 |
+| 推荐缓存命中 | `RecommendationService.recommend(..., use_cache=True)` | 0.001 |
+| 端到端总耗时 | 从建库到查询完成 | 175.123 |
+
+## 4. 当前版本的优化建议
 
 1. seed_keyword 与 candidate_keyword 已建立索引，查询路径更稳定。
 2. 在线查询应优先使用缓存，避免重复排序。

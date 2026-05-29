@@ -1,0 +1,10 @@
+alpha: 0.5
+beta: 0.3
+gamma: 0.2
+min_cooccur: 3
+min_freq: 5
+top_k: 50
+ema_alpha: 0.3
+rolling_days: 7
+growth_smoothing: 5
+db_path: "./compkey_p4.sqlite3"

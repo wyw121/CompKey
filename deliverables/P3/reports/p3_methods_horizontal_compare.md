@@ -216,7 +216,113 @@ Tokenizer 的速度基准来自 `p3_tokenizer_benchmark.csv`，样本数 265：
 
 ---
 
-## 7. 脚本与文件位置
+## 7. 模块级耗时拆分与方法横向选择
+
+这一部分补的是“按模块拆开看”的真实耗时与方法效果。数据来源均来自已经跑完的实验产物：
+
+- `deliverables/P3/reports/p3_performance_summary.md`
+- `deliverables/P3/reports/p3_performance_benchmark.csv`
+- `deliverables/P3/reports/p3_multimethod_tokenizer_compare.csv`
+- `deliverables/P3/reports/p3_tokenizer_benchmark.csv`
+- `deliverables/P3/reports/p3_db_compare_benchmark.csv`
+- `deliverables/P3/reports/p3_scale_benchmark.csv`
+
+### 7.1 模块级耗时总表
+
+| 模块 | 真实数据来源 | 关键指标 | 结果 |
+|---|---|---|---:|
+| 数据库初始化 | `p3_performance_summary.md` / `run_stage3_benchmark.py` | init_ms | 41.648 ms |
+| 离线导入 | 同上 | import_ms | 114.985 ms |
+| 在线 seed 查询 | 同上 | seed 查询平均耗时 | 0.068 ms |
+| 在线 seed 查询 | 同上 | seed 查询中位数耗时 | 0.066 ms |
+| 推荐冷启动 | 同上 | cold recommend 平均耗时 | 0.103 ms |
+| 推荐缓存命中 | 同上 | warm recommend 平均耗时 | 0.001 ms |
+| 端到端总耗时 | 同上 | total_ms | 175.123 ms |
+
+### 7.2 各模块的横向方法效果
+
+#### 7.2.1 分词模块：速度 vs 下游效果
+
+速度基准（`p3_tokenizer_benchmark.csv`）显示：
+
+| tokenizer | queries/sec | tokens/sec | avg tokens/query |
+|---|---:|---:|---:|
+| jieba_precise | 8828.07 | 40209.34 | 4.55 |
+| jieba_search | 7222.20 | 41534.49 | 5.75 |
+| regex | 456817.80 | 575762.81 | 1.26 |
+| thulac | 1486.89 | 7905.79 | 5.32 |
+
+但如果把分词结果带到后续推荐任务里看（`p3_multimethod_tokenizer_compare.csv`），`jieba_search` 的整体效果最稳：
+
+| tokenizer | best recall@10 | best mrr@10 | 说明 |
+|---|---:|---:|---|
+| jieba_search | 0.399125 | 0.657075 | 下游召回和排序都最均衡 |
+| jieba_precise | 0.283889 | 0.349079 | 中等偏稳 |
+| thulac | 0.343261 | 0.606918 | 细粒度更强，但速度慢 |
+| regex | 0.136792 | 0.125000 | 速度极快，但切分太粗，不适合作为主方案 |
+
+结论：**如果是实际作业主线，推荐把 `jieba_search` 当默认 tokenizer。**
+
+#### 7.2.2 排序/候选模块：方法横向对比
+
+跨 tokenizer 汇总后的方法平均表现如下（来自 `p3_methods_horizontal_compare.md` 前文整理）：
+
+| method | avg_recall@10 | avg_mrr@10 | avg_no_cache_ms |
+|---|---:|---:|---:|
+| bm25 | 0.229731 | 0.383313 | 0.149702 |
+| compkey_current | 0.273078 | 0.399017 | 0.097368 |
+| cooccur_freq | 0.289980 | 0.434518 | 0.086595 |
+| pmi | 0.204965 | 0.383313 | 0.097653 |
+| tfidf | 0.289195 | 0.404023 | 0.093508 |
+
+结论：
+
+- **召回优先**：`tfidf` 和 `cooccur_freq` 最强，`tfidf` 更偏覆盖。
+- **排序前列命中优先**：`cooccur_freq` 的平均 MRR@10 最好。
+- **工程稳定性和速度**：`cooccur_freq` 也最快之一，`tfidf` 也很接近。
+
+#### 7.2.3 数据库模块：SQLite vs MySQL
+
+| backend | init_ms | import_ms | read_avg_ms | write_rows_per_sec | mixed_read_avg_ms | mixed_write_avg_ms |
+|---|---:|---:|---:|---:|---:|---:|
+| sqlite | 79.214200 | 16.676000 | 0.748564 | 10577.029864 | 0.635546 | 3.177576 |
+| mysql | 409.418900 | 121.790800 | 3.670175 | 2459.464439 | 4.879193 | 9.526238 |
+
+结论：在当前本机、小样本、低并发条件下，**SQLite 明显更快**；如果后面要扩展并发和工程部署，再切 MySQL/PostgreSQL 更合适。
+
+#### 7.2.4 规模扩展模块：100k / 1M token
+
+| scale | build_ms_mean | build_ms_std | 95%CI |
+|---|---:|---:|---:|
+| 100k | 1108.53 | 86.34 | ±138.39 |
+| 300k | 2962.16 | 151.15 | ±242.25 |
+| 500k | 4885.30 | 230.07 | ±368.73 |
+| 1M | 9347.90 | 1006.99 | ±1613.94 |
+
+结论：规模越大，构建时间越长，而且波动也会增大；但整体趋势是清晰的近线性增长。
+
+### 7.3 最佳方案建议
+
+如果你的目标是“**整体最均衡、最适合作业展示**”，我建议当前版本的最佳组合写成：
+
+> **`jieba_search + tfidf + SQLite(WAL) + LRU cache`**
+
+理由：
+
+1. `jieba_search` 是分词模块里最均衡的默认方案。
+2. `tfidf` 在召回上最好，同时延时也很低。
+3. SQLite 在本机小规模实验里最省事、速度也最好。
+4. LRU cache 能把推荐命中从 0.103 ms 降到 0.001 ms，提升非常明显。
+
+如果你更重视“**把最相关的候选排到最前**”，那可以把候选排序策略改成：
+
+> **`jieba_search + cooccur_freq + SQLite(WAL) + LRU cache`**
+
+因为 `cooccur_freq` 的 MRR@10 最好，更适合强调前排命中。
+
+---
+
+## 8. 脚本与文件位置
 
 - `run_stage3_multimethod_benchmark.py`
 - `run_stage3_db_compare_benchmark.py`
@@ -237,6 +343,6 @@ Tokenizer 的速度基准来自 `p3_tokenizer_benchmark.csv`，样本数 265：
 
 ---
 
-## 8. 一句话结尾
+## 9. 一句话结尾
 
 P3 这一批横向对比现在已经形成了比较完整的闭环：**方法、分词、数据库、扩展性**都已经有真实数据、表格和图，后续如果继续加实验，就直接往这个总汇总页下面补即可。

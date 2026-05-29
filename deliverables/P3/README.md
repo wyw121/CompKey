@@ -33,6 +33,23 @@ P3/
 - `generate_tokenizer_plots.py`：Tokenizer 与 scale 图表
 - `generate_tokenizer_compare_report.py`：Tokenizer × Method 汇总表
 - `generate_horizontal_compare_plots.py`：横向对比总览图表
+- `check_recommendations.py`：终端交互版推荐查询，适合手动输入一个 seed 直接看 Top-N 结果
+
+## 交互版怎么启动
+
+在仓库根目录先激活虚拟环境，然后运行：
+
+```powershell
+python .\deliverables\P3\check_recommendations.py
+```
+
+运行后直接输入关键词，比如 `面膜`，回车就会输出推荐结果。
+
+如果你想一次性查一个词，也可以这样：
+
+```powershell
+python .\deliverables\P3\check_recommendations.py --seed 面膜 --top-n 10
+```
 
 ## 备注
 

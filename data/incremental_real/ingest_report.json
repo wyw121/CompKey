@@ -1,0 +1,7 @@
+{
+  "total_rows": 1524,
+  "parsed_time_rows": 0,
+  "skipped_time_rows": 1524,
+  "parsed_time_ratio": 0.0,
+  "note": "仅可解析时间戳的行会进入 keyword_timeseries；不再使用当前日期兜底。"
+}

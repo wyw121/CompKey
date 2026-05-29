@@ -27,7 +27,9 @@ Notes:
 	- `deliverables/P1/run_train_v2_full/tokenized_queries_v1.csv`（分词结果，token_count=1207）
 	- `deliverables/P1/run_train_v2_full/word_freq_v1.csv`（全局词频）
 	- `deliverables/P1/run_train_v2_full/seed_related_queries_v1.csv`（与种子相关的查询，seed_related_count=265）
-	- `deliverables/P1/seed_keywords_v1.csv`（种子表）
+	- `deliverables/P1/seed_keywords_v1.csv`（P1 阶段人工整理的控制种子表，共 15 个 seed，字段含 keyword/domain/reason/owner）
+
+补充说明：这里的 `seed_keywords_v1.csv` 不是从日志里自动挖出来的词表，而是项目预先定义的 seed 集合。它的作用是把 P1/P3 的离线统计、候选生成与横向评估固定在同一组业务锚点上，方便复现与对照。
 
 2) 离线处理（位置与实现）
 - 代码位置：`deliverables/P3/compkey_p3/offline_pipeline.py`。
@@ -115,6 +117,7 @@ Notes:
 	2) 软件系统结构设计：见 `architecture_design_v1.md`（离线/在线分层图与职责）。
 	3) 功能模块设计：见 `module_design_v1.md` 与代码目录 `deliverables/P3/compkey_p3`（`offline_pipeline.py`、`service.py`、`repository.py`、`database.py`）。
 	4) 数据库设计：见 `db_schema_v1.sql` 与 `db_dictionary_v1.csv`（数据字典）。
+- 3.3 补充说明：完整的“seed 来源说明 + 3.3 对照”已单独整理到 `reports/p3_assignment_alignment_addendum.md`，适合答辩时快速引用。
 - 3.4 作业提交（验收要点）：
 	1) 已创建并初始化数据库（`compkey_stage3.sqlite3`），`run_stage3_benchmark.py` 已在本环境运行并写入 `deliverables/P3/reports`。
 	2) 实验/验收材料已产出：性能报告、示例推荐、最终摘要、DB 文件。

@@ -6,6 +6,8 @@
 
 - `p3_methods_horizontal_compare.md`：横向对比总文档（推荐作为主入口）
 - `p3_final_summary.md`：阶段最终摘要
+- `p3_assignment_alignment_addendum.md`：3.3 内容对照、seed 来源与补充说明
+- `v2/README.md`：v2 横向评估入口（seed_keywords_v2.csv）
 - `p3_multimethod_tokenizer_compare.md`：Tokenizer × Method 组合对比
 - `p3_db_compare_benchmark.md`：数据库对比（SQLite vs MySQL）
 - `p3_scale_benchmark.md`：100k / 1M token 扩展性测试

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CompKey Demo</title>
+  <link rel="icon" type="image/svg+xml" href="/frontend/favicon.svg" />
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 20px }
+    #results { margin-top: 20px }
+    table { border-collapse: collapse; width: 100% }
+    th, td { border: 1px solid #ddd; padding: 8px }
+    th { background: #f4f4f4 }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
+</head>
+<body>
+  <h2>竞争性关键词推荐（Demo）</h2>
+  <div style="margin-bottom:10px">
+    <a href="/frontend/index.html">关键词推荐</a>
+    |
+    <a href="/frontend/trending.html">时下流行关键词</a>
+  </div>
+  <div>
+    <input id="seedInput" placeholder="输入种子词，例如: 苹果 手机" style="width:300px;padding:6px" />
+    <button id="searchBtn">查询</button>
+  </div>
+
+  <div style="margin-top:12px">
+    <div style="font-size:13px;color:#666;margin-bottom:6px">快捷热词（点击直接搜索）</div>
+    <div id="quickSeeds" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <div id="errorBox" style="display:none;margin-top:10px;padding:8px;border:1px solid #f1b5b5;background:#fff5f5;color:#9b1c1c"></div>
+
+  <div id="results"></div>
+
+  <div id="trendModal" style="display:none;margin-top:20px">
+    <h3 id="trendTitle"></h3>
+    <div id="trendChart" style="height:320px"></div>
+    <button id="closeTrend">关闭趋势</button>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

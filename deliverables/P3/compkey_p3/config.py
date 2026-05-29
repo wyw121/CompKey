@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,10 +21,14 @@ class Settings:
 
 def get_settings() -> Settings:
     p3_dir = ROOT_DIR / "deliverables" / "P3"
+    p1_output_dir = Path(os.getenv("COMPKEY_P1_OUTPUT_DIR", str(ROOT_DIR / "deliverables" / "P1" / "run_train_v2_full")))
+    seed_csv = Path(os.getenv("COMPKEY_SEED_CSV", str(ROOT_DIR / "deliverables" / "P1" / "seed_keywords_v1.csv")))
+    db_path = Path(os.getenv("COMPKEY_DB_PATH", str(p3_dir / "compkey_stage3.sqlite3")))
+    report_dir = Path(os.getenv("COMPKEY_REPORT_DIR", str(p3_dir / "reports")))
     return Settings(
         root_dir=ROOT_DIR,
-        p1_output_dir=ROOT_DIR / "deliverables" / "P1" / "run_train_v2_full",
-        seed_csv=ROOT_DIR / "deliverables" / "P1" / "seed_keywords_v1.csv",
-        db_path=p3_dir / "compkey_stage3.sqlite3",
-        report_dir=p3_dir / "reports",
+        p1_output_dir=p1_output_dir,
+        seed_csv=seed_csv,
+        db_path=db_path,
+        report_dir=report_dir,
     )
