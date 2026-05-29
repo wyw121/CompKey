@@ -1,0 +1,4 @@
+db_path: "./compkey_trend_demo.sqlite3"
+min_freq: 5
+growth_smoothing: 5
+hot_source_label: "今日热榜（百度/知乎/微博聚合）"

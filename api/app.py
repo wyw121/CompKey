@@ -66,7 +66,7 @@ app.add_middleware(
 def load_config():
     cfg_path = os.environ.get('COMPKY_CONFIG') or CONFIG_PATH_DEFAULT
     if os.path.exists(cfg_path):
-        return yaml.safe_load(open(cfg_path, 'r'))
+        return yaml.safe_load(open(cfg_path, 'r', encoding='utf-8-sig'))
     return {}
 
 
@@ -228,7 +228,7 @@ def hot_keywords(limit: int = 20, window_days: int = 7):
 
     return {
         'items': items[:limit],
-        'source': 'Sogou 原始日志重建',
+        'source': get_param('hot_source_label', 'Sogou 原始日志重建'),
         'date_range': {
             'start': recent_start.isoformat(),
             'end': end_date.isoformat(),

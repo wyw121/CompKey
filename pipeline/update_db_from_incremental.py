@@ -189,7 +189,7 @@ def main():
     parser.add_argument('--config', default='./config/competition_params.yaml', help='params yaml')
     args = parser.parse_args()
 
-    params = yaml.safe_load(open(args.config, 'r')) if os.path.exists(args.config) else {}
+    params = yaml.safe_load(open(args.config, 'r', encoding='utf-8-sig')) if os.path.exists(args.config) else {}
 
     # ensure files exist
     kd = os.path.join(args.inc, 'keyword_date_counts.csv')

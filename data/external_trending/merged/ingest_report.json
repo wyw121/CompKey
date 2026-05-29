@@ -1,0 +1,26 @@
+{
+  "snapshot_date": "2026-05-29",
+  "source_count": 3,
+  "merged_keyword_count": 30,
+  "sources": {
+    "baidu": {
+      "capture_path": "data\\external_trending\\captures\\baidu_snapshot.txt",
+      "records": "10",
+      "normalized_rows": "10",
+      "top_keyword": "自觉同人民想在一起、干在一起"
+    },
+    "zhihu": {
+      "capture_path": "data\\external_trending\\captures\\zhihu_snapshot.txt",
+      "records": "10",
+      "normalized_rows": "10",
+      "top_keyword": "如何评价比亚迪自研的 4nm 璇玑 A3 智驾芯片？"
+    },
+    "weibo": {
+      "capture_path": "data\\external_trending\\captures\\weibo_snapshot.txt",
+      "records": "10",
+      "normalized_rows": "10",
+      "top_keyword": "日本转移12万居民"
+    }
+  },
+  "note": "raw/normalized 分层保留了来源差异，merged 层仅输出与现有增量入库兼容的核心字段。"
+}

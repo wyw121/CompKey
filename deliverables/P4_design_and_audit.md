@@ -120,5 +120,37 @@ CREATE TABLE IF NOT EXISTS keyword_stats (
 
 请选择你希望我下一步实现哪个模块（或允许我按里程碑顺序开始实现：算法实现 → 离线管道 → DB schema 增补 → API → 前端 demo）。
 
+## 9 外部热榜接入：成熟系统通常怎么做
+针对“新来源字段不一致、数据类型不一致、字段名不一致”的情况，较成熟的做法一般是三层：
+
+1. **Raw 层**：按来源单独保存原始快照，不做强行统一。
+  - 例如本次实验把百度 / 知乎 / 微博分别落到 `data/external_trending/captures/`。
+2. **Normalized/Staging 层**：给每个来源做字段映射，统一成 canonical schema。
+  - 本次统一成 `keyword,date,freq,uniq_users,source,source_rank,raw_heat,raw_heat_unit`。
+  - 这样即使标题/热度格式不同，也只在各自适配器里处理，不会污染主流程。
+3. **Curated 层**：把已经标准化的多源数据合并为系统真正消费的最小字段集。
+  - 本次输出 `data/external_trending/merged/keyword_date_counts.csv`，直接兼容现有增量入库脚本。
+
+这样做的好处：
+- 出错时能定位到具体来源，而不是“全局数据坏了”。
+- 新来源可以独立测试，不会影响旧 Sogou 语料。
+- 如果未来要接入更多来源，只需要增加一个 adapter，而不是改整条主链路。
+
+## 10 本次本地验证结论
+- 外部热榜来源：`今日热榜` 聚合页中的 **百度实时热点**、**知乎热榜**、**微博热搜榜**。
+- 本地分层测试：每个来源取 10 条，合计 30 条合并记录。
+- 结果文件：
+  - `data/external_trending/captures/*.txt`
+  - `data/external_trending/normalized/*.csv`
+  - `data/external_trending/merged/keyword_date_counts.csv`
+  - `data/external_trending/merged/ingest_report.json`
+- demo 数据库：`compkey_trend_demo.sqlite3`
+- demo API 验证：
+  - `/hot_keywords` 可以直接读到新库中的热点词，返回的 `source` 已切换为 `今日热榜（百度/知乎/微博聚合）`。
+  - `/trend` 可以直接查询单个关键词，并返回时间序列。
+
+结论：
+> 新数据源可以以“独立快照 → 标准化 → 合并层 → 独立 demo 库”的方式接入，现有入库脚本与 API 兼容良好；同时旧数据集没有被覆盖，分离策略是有效的。
+
 ---
 （审计基于仓库内文件：`deliverables/P1/*`, `deliverables/P3/*`, `数据分析与商务智能数据/搜索日志/*` 的抽样检查；若需我直接读取大文件进行完整统计（行数/时间分布/Top-k 词频），我可以运行增量读取脚本并输出统计结果。）
