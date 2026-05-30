@@ -9,6 +9,7 @@ let volumeChartInstance = null;
 let resultChartInstance = null;
 let currentResultItems = [];
 let expandedResultTrend = null;
+let volumeLoadSeq = 0;
 
 function normalizeSource(source) {
   const key = String(source || 'p4').trim().toLowerCase();
@@ -75,10 +76,18 @@ function updateVolumeSummary(payload) {
   if (peakEl) peakEl.textContent = payload?.peak_day || '--';
 }
 
+function disposeVolumeChart() {
+  if (volumeChartInstance) {
+    volumeChartInstance.dispose();
+    volumeChartInstance = null;
+  }
+}
+
 function renderVolumeChart(payload) {
   const box = document.getElementById('dataVolumeChart');
   const status = document.getElementById('volumeStatus');
   if (!box) return;
+  disposeVolumeChart();
   updateVolumeSummary(payload);
   if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
     box.innerHTML = '<div class="empty-state">暂无可展示的数据量趋势。</div>';
@@ -88,7 +97,7 @@ function renderVolumeChart(payload) {
 
   if (status) status.textContent = `${payload.source || '数据源'} · ${payload.date_range?.start || '--'} ~ ${payload.date_range?.end || '--'}`;
 
-  const chart = volumeChartInstance || echarts.init(box);
+  const chart = echarts.init(box);
   volumeChartInstance = chart;
   const dates = payload.series.map(item => item.date);
   const volumes = payload.series.map(item => item.total_volume || 0);
@@ -117,17 +126,23 @@ function renderVolumeChart(payload) {
       areaStyle: { color: 'rgba(17, 24, 39, 0.08)' },
     }],
   });
+  requestAnimationFrame(() => {
+    if (volumeChartInstance) volumeChartInstance.resize();
+  });
 }
 
 async function loadVolumeTrend() {
   const box = document.getElementById('dataVolumeChart');
   const status = document.getElementById('volumeStatus');
   if (!box) return;
+  const loadSeq = ++volumeLoadSeq;
+  disposeVolumeChart();
   box.innerHTML = '<div class="empty-state">加载中...</div>';
   if (status) status.textContent = '加载中...';
   try {
     const source = getSelectedSource();
     const res = await fetch(`${API_BASE}/source_volume?source=${encodeURIComponent(source)}`);
+    if (loadSeq !== volumeLoadSeq || source !== getSelectedSource()) return;
     if (!res.ok) {
       const txt = await res.text();
       box.innerHTML = `<div class="empty-state">数据量趋势加载失败：${escapeHtml(txt || res.statusText)}</div>`;
@@ -138,6 +153,7 @@ async function loadVolumeTrend() {
     const payload = await res.json();
     renderVolumeChart(payload);
   } catch (err) {
+    if (loadSeq !== volumeLoadSeq) return;
     box.innerHTML = '<div class="empty-state">数据量趋势加载失败</div>';
     if (status) status.textContent = '加载失败';
     updateVolumeSummary(null);
@@ -187,6 +203,8 @@ function bindSourceSelector(onChange) {
   select.addEventListener('change', async () => {
     setSelectedSource(select.value);
     updateSourceUi();
+    volumeLoadSeq += 1;
+    disposeVolumeChart();
     currentResultItems = [];
     expandedResultTrend = null;
     const results = document.getElementById('results');

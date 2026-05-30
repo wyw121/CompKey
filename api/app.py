@@ -511,15 +511,38 @@ def seed_suggestions(limit: int = 12, source: str = 'edgar'):
         (int(get_param('min_freq', 5)), limit)
     )
     rows = cur.fetchall()
-    conn.close()
-    return [
-        SeedSuggestionItem(
-            seed=r['seed'],
-            candidate_count=int(r['candidate_count'] or 0),
-            best_competition=float(r['best_competition'] or 0.0),
+
+    if not rows:
+        cur.execute(
+            '''
+            SELECT
+                keyword AS seed,
+                COUNT(*) AS candidate_count,
+                0.0 AS best_competition
+            FROM keyword_timeseries
+            GROUP BY keyword
+            ORDER BY SUM(freq) DESC, COUNT(*) DESC, keyword ASC
+            LIMIT ?
+            ''',
+            (limit,)
         )
-        for r in rows
-    ]
+        rows = cur.fetchall()
+
+    suggestions = []
+    for r in rows:
+        seed = normalize_token(r['seed'])
+        if is_noise_token(seed):
+            continue
+        suggestions.append(
+            SeedSuggestionItem(
+                seed=seed,
+                candidate_count=int(r['candidate_count'] or 0),
+                best_competition=float(r['best_competition'] or 0.0),
+            )
+        )
+        if len(suggestions) >= limit:
+            break
+    return suggestions
 
 
 @app.get('/health')

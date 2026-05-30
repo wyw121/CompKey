@@ -12,6 +12,7 @@ let expandedTrend = null;
 let chartInstance = null;
 let volumeChartInstance = null;
 let sourceVolumeCache = {};
+let volumeLoadSeq = 0;
 
 function normalizeSource(source) {
   const key = String(source || 'p4').trim().toLowerCase();
@@ -191,6 +192,29 @@ async function loadSourceCatalog() {
   }
 }
 
+function disposeVolumeChart() {
+  if (volumeChartInstance) {
+    volumeChartInstance.dispose();
+    volumeChartInstance = null;
+  }
+}
+
+function updateSourceOverview(volumePayload, selectedSource) {
+  const meta = getSourceMeta(selectedSource);
+  const sourceLabel = document.getElementById('dataSource');
+  const desc = document.getElementById('sourceDescription');
+  const spanEl = document.getElementById('sourceSpanLabel');
+  const totalEl = document.getElementById('sourceTotalVolumeLabel');
+  const activeEl = document.getElementById('sourceActiveDaysLabel');
+  const peakEl = document.getElementById('sourcePeakDayLabel');
+  if (sourceLabel) sourceLabel.textContent = meta.label || getSourceLabel(selectedSource);
+  if (desc) desc.textContent = meta.description || '暂无说明';
+  if (spanEl) spanEl.textContent = volumePayload?.date_range ? `${volumePayload.date_range.start} ~ ${volumePayload.date_range.end}` : '未知';
+  if (totalEl) totalEl.textContent = String(volumePayload?.total_volume ?? '--');
+  if (activeEl) activeEl.textContent = String(volumePayload?.active_days ?? '--');
+  if (peakEl) peakEl.textContent = volumePayload?.peak_day || '--';
+}
+
 async function getSourceVolume(source) {
   const key = normalizeSource(source);
   if (sourceVolumeCache[key]) return sourceVolumeCache[key];
@@ -271,6 +295,7 @@ function renderVolumeChart(payload, startDate, endDate) {
   const box = document.getElementById('dataVolumeChart');
   const status = document.getElementById('volumeStatus');
   if (!box) return;
+  disposeVolumeChart();
   const chartData = buildWindowVolumeChart(payload, startDate, endDate);
   if (!chartData || !Array.isArray(chartData.series) || chartData.series.length === 0) {
     box.innerHTML = '<div class="empty-state">暂无可展示的数据量趋势。</div>';
@@ -280,7 +305,7 @@ function renderVolumeChart(payload, startDate, endDate) {
   }
   updateVolumeSummary(chartData);
   if (status) status.textContent = `${chartData.source || '数据源'} · 前窗口 ${chartData.prevRange.start} ~ ${chartData.prevRange.end} / 当前窗口 ${chartData.currentRange.start} ~ ${chartData.currentRange.end}`;
-  const chart = volumeChartInstance || echarts.init(box);
+  const chart = echarts.init(box);
   volumeChartInstance = chart;
   chart.setOption({
     grid: { left: 52, right: 24, top: 30, bottom: 44 },
@@ -312,40 +337,31 @@ function renderVolumeChart(payload, startDate, endDate) {
       },
     }],
   });
+  requestAnimationFrame(() => {
+    if (volumeChartInstance) volumeChartInstance.resize();
+  });
 }
 
 async function loadVolumeTrend(startDate, endDate) {
   const box = document.getElementById('dataVolumeChart');
   const status = document.getElementById('volumeStatus');
   if (!box) return;
+  const loadSeq = ++volumeLoadSeq;
+  disposeVolumeChart();
   box.innerHTML = '<div class="empty-state">加载中...</div>';
   if (status) status.textContent = '加载中...';
   try {
     const source = getSelectedSource();
     const payload = await getSourceVolume(source);
+    if (loadSeq !== volumeLoadSeq || source !== getSelectedSource()) return;
+    updateSourceOverview(payload, source);
     renderVolumeChart(payload, startDate, endDate);
   } catch (_) {
+    if (loadSeq !== volumeLoadSeq) return;
     box.innerHTML = '<div class="empty-state">数据量趋势加载失败</div>';
     if (status) status.textContent = '加载失败';
     updateVolumeSummary(null);
   }
-}
-
-function updateTopMeta(payload, selectedSource) {
-  const meta = getSourceMeta(selectedSource);
-  const sourceLabel = Array.isArray(payload) ? meta.label : (payload.source || meta.label);
-  const range = Array.isArray(payload)
-    ? '未知'
-    : `${payload.date_range?.start || '未知'} ~ ${payload.date_range?.end || '未知'}`;
-  const comparisonRange = Array.isArray(payload)
-    ? '未知'
-    : `${payload.comparison_range?.start || '未知'} ~ ${payload.comparison_range?.end || '未知'}`;
-
-  document.getElementById('dataSource').textContent = sourceLabel;
-  document.getElementById('sourceDescription').textContent = meta.description || '暂无说明';
-  document.getElementById('dataRange').textContent = range;
-  document.getElementById('comparisonRange').textContent = comparisonRange;
-  document.getElementById('updatedAt').textContent = new Date().toLocaleString();
 }
 
 async function loadHotKeywords() {
@@ -375,7 +391,6 @@ async function loadHotKeywords() {
     currentHotItems = items;
     currentWindowDays = diffDaysInclusive(startDate, endDate);
     renderHotList(items, currentWindowDays);
-    updateTopMeta(payload, selectedSource);
     await loadVolumeTrend(startDate, endDate);
   } catch (e) {
     showError(await classifyFetchFailure());
