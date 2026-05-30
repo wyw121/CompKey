@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>CompKey | 热词榜单</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css?v=1" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">CompKey</div>
+          <div class="brand-subtitle">Hot keyword ranking</div>
+        </div>
+      </div>
+      <nav class="topnav">
+        <a href="index.html">关键词推荐</a>
+        <a class="active" href="trending.html">热词榜单</a>
+        <span class="source-badge" id="currentSourceLabel">P4 主库</span>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>热词榜单</h1>
+          <p>
+            选择一个真实有数据的时间窗口，系统会在选定区间内按搜索量展示榜单，并自动与前一窗口做对比。
+            趋势图会直接展开在你点中的那一行下面，方便一边看排名，一边看时间变化。
+          </p>
+          <div class="hero-meta">
+            <span class="pill">内联趋势展开</span>
+            <span class="pill">自定义时间范围</span>
+            <span class="pill">企业级信息层级</span>
+          </div>
+        </div>
+        <div class="panel" style="margin:0;padding:18px;">
+          <div class="panel-header" style="margin-bottom:10px">
+            <div>
+              <div class="panel-title">数据概览</div>
+              <div class="panel-note" id="sourceDescription">等待加载...</div>
+            </div>
+            <span class="source-badge" id="dataSource">等待加载...</span>
+          </div>
+          <div class="source-row">
+            <span class="tag">选定区间 <strong id="dataRange">等待加载...</strong></span>
+            <span class="tag">对比区间 <strong id="comparisonRange">等待加载...</strong></span>
+            <span class="tag">刷新 <strong id="updatedAt">等待加载...</strong></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">筛选器</div>
+          <div class="panel-note">时间范围会根据当前数据源的边界自动限制，只能选择有真实数据的窗口。</div>
+        </div>
+      </div>
+
+      <div class="filters">
+        <div class="filter-block">
+          <label>数据源</label>
+          <select id="demoSource">
+            <option value="p4">P4 主库</option>
+            <option value="aol">AOL demo</option>
+          </select>
+        </div>
+        <div class="filter-block">
+          <label>开始日期</label>
+          <input id="startDate" type="date" />
+        </div>
+        <div class="filter-block">
+          <label>结束日期</label>
+          <input id="endDate" type="date" />
+        </div>
+        <div class="filter-block">
+          <label>展示数量</label>
+          <select id="limit">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+        <button id="refreshBtn" class="primary">刷新榜单</button>
+      </div>
+    </section>
+
+    <div id="errorBox" class="error-box"></div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">热词排行榜</div>
+          <div class="panel-note">点击“查看趋势”，图表会直接展开在当前行下方。</div>
+        </div>
+      </div>
+      <div id="hotList" class="table-wrap"></div>
+    </section>
+  </div>
+
+  <script src="trending.js?v=8"></script>
+</body>
+</html>
