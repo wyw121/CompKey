@@ -6,6 +6,9 @@ const SOURCE_OPTIONS = [
 ];
 let sourceCatalog = {};
 let volumeChartInstance = null;
+let resultChartInstance = null;
+let currentResultItems = [];
+let expandedResultTrend = null;
 
 function normalizeSource(source) {
   const key = String(source || 'p4').trim().toLowerCase();
@@ -38,7 +41,7 @@ async function loadSourceCatalog() {
 }
 
 function renderSourceSelector() {
-  const select = document.getElementById('demoSource');
+  const select = document.getElementById('demoSourceTop');
   if (!select) return;
   const options = SOURCE_OPTIONS
     .map(item => {
@@ -170,7 +173,7 @@ function getSourceLabel(source) {
 }
 
 function updateSourceUi() {
-  const select = document.getElementById('demoSource');
+  const select = document.getElementById('demoSourceTop');
   if (!select) return;
   const current = getSelectedSource();
   select.value = current;
@@ -178,15 +181,25 @@ function updateSourceUi() {
 }
 
 function bindSourceSelector(onChange) {
-  const select = document.getElementById('demoSource');
+  const select = document.getElementById('demoSourceTop');
   if (!select) return;
   select.value = getSelectedSource();
   select.addEventListener('change', async () => {
     setSelectedSource(select.value);
     updateSourceUi();
+    currentResultItems = [];
+    expandedResultTrend = null;
+    const results = document.getElementById('results');
+    if (results) results.innerHTML = '';
+    setResultCount(0);
     if (typeof onChange === 'function') {
       await onChange(select.value);
     }
+    currentResultItems = [];
+    expandedResultTrend = null;
+    if (results) results.innerHTML = '';
+    setResultCount(0);
+    setTimeout(() => setResultCount(0), 0);
   });
 }
 
@@ -271,7 +284,9 @@ async function runSearch(seedOverride) {
       return showError(`查询失败（HTTP ${res.status}）：${txt || res.statusText}`);
     }
     const data = await res.json();
-    renderResults(data);
+    currentResultItems = Array.isArray(data) ? data : [];
+    expandedResultTrend = null;
+    renderResults(currentResultItems);
     setResultCount(Array.isArray(data) ? data.length : 0);
     setLastUpdated();
   } catch (err) {
@@ -291,7 +306,29 @@ function renderResults(items) {
   }
   let html = '<table><thead><tr><th>候选词</th><th>竞争度</th><th>频次</th><th>PMI</th><th>趋势</th></tr></thead><tbody>';
   for (const it of items) {
-    html += `<tr><td><strong>${escapeHtml(it.candidate)}</strong></td><td>${it.competition.toFixed(3)}</td><td>${it.freq}</td><td>${it.pmi.toFixed(3)}</td><td><button class="row-action trendBtn" data-keyword="${escapeHtml(it.candidate)}">查看趋势</button></td></tr>`;
+    const cand = it.candidate;
+    html += `<tr><td><strong>${escapeHtml(cand)}</strong></td><td>${Number(it.competition).toFixed(3)}</td><td>${it.freq}</td><td>${Number(it.pmi).toFixed(3)}</td><td><button class="row-action trendBtn" data-keyword="${escapeHtml(cand)}">查看趋势</button></td></tr>`;
+    if (expandedResultTrend && expandedResultTrend.keyword === cand) {
+      const growth = expandedResultTrend.data;
+      const trendStart = growth.series && growth.series.length ? growth.series[0].date : '';
+      const trendEnd = growth.series && growth.series.length ? growth.series[growth.series.length - 1].date : '';
+      html += `
+        <tr class="inline-detail">
+          <td colspan="5" class="inline-detail-cell">
+            <div class="inline-detail-card">
+              <div class="inline-detail-head">
+                <div>
+                  <div class="inline-detail-title">趋势：${escapeHtml(growth.keyword)}</div>
+                  <div class="inline-detail-subtitle">趋势区间 ${trendStart || '—'} ~ ${trendEnd || '—'} · 最近 90 天走势</div>
+                </div>
+                <button class="row-action closeTrendBtn" data-close-keyword="${escapeHtml(cand)}">关闭</button>
+              </div>
+              <div id="inlineResultTrendChart" class="chart-shell"></div>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
   }
   html += '</tbody></table>';
   div.innerHTML = html;
@@ -299,11 +336,36 @@ function renderResults(items) {
     const kw = e.target.dataset.keyword;
     await showTrend(kw);
   }));
+  document.querySelectorAll('.closeTrendBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      expandedResultTrend = null;
+      renderResults(currentResultItems);
+    });
+  });
+  if (expandedResultTrend && document.getElementById('inlineResultTrendChart')) {
+    drawInlineResultTrend(expandedResultTrend.data);
+  }
+}
+
+function drawInlineResultTrend(data) {
+  const chartEl = document.getElementById('inlineResultTrendChart');
+  if (!chartEl || !data || !data.series || !data.series.length) return;
+  if (resultChartInstance) {
+    resultChartInstance.dispose();
+    resultChartInstance = null;
+  }
+  resultChartInstance = echarts.init(chartEl);
+  resultChartInstance.setOption({
+    grid: { left: 44, right: 24, top: 24, bottom: 40 },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: data.series.map(x => x.date), axisLabel: { color: '#6b7280' }, axisLine: { lineStyle: { color: '#d5dbe7' } } },
+    yAxis: { type: 'value', axisLabel: { color: '#6b7280' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
+    series: [{ type: 'line', smooth: true, data: data.series.map(x => x.freq), symbol: 'circle', symbolSize: 6, lineStyle: { width: 2, color: '#111827' }, itemStyle: { color: '#111827' }, areaStyle: { color: 'rgba(17, 24, 39, 0.06)' } }]
+  });
 }
 
 async function showTrend(keyword) {
   clearError();
-  let data;
   try {
     const source = getSelectedSource();
     const res = await fetch(`${API_BASE}/trend?keyword=${encodeURIComponent(keyword)}&days=90&source=${encodeURIComponent(source)}`);
@@ -311,31 +373,20 @@ async function showTrend(keyword) {
       const txt = await res.text();
       return showError(`趋势请求失败（HTTP ${res.status}）：${txt || res.statusText}`);
     }
-    data = await res.json();
+    const data = await res.json();
+    if (!data.has_time_data || !data.series || data.series.length === 0) {
+      return showError(data.note || '该关键词暂无可解析时间戳数据，无法绘制真实时间轴。');
+    }
+    expandedResultTrend = { keyword, data };
+    renderResults(currentResultItems);
   } catch (err) {
     return showError(await classifyFetchFailure(err));
   }
-
-  if (!data.has_time_data || !data.series || data.series.length === 0) {
-    return showError(data.note || '该关键词暂无可解析时间戳数据，无法绘制真实时间轴。');
-  }
-
-  document.getElementById('trendModal').style.display = 'block';
-  const nonZero = data.series.filter(x => Number(x.freq) > 0).length;
-  document.getElementById('trendTitle').innerText = `趋势：${data.keyword}（近90天，非零点 ${nonZero}）`;
-  const chart = echarts.init(document.getElementById('trendChart'));
-  const dates = data.series.map(x => x.date);
-  const freqs = data.series.map(x => x.freq);
-  const option = {
-    xAxis: { type: 'category', data: dates },
-    yAxis: { type: 'value' },
-    series: [{ type: 'line', data: freqs, smooth: true }]
-  };
-  chart.setOption(option);
 }
 
-document.getElementById('closeTrend').addEventListener('click', () => {
-  document.getElementById('trendModal').style.display = 'none';
+window.addEventListener('resize', () => {
+  if (volumeChartInstance) volumeChartInstance.resize();
+  if (resultChartInstance) resultChartInstance.resize();
 });
 
 function escapeHtml(s) {
@@ -345,6 +396,8 @@ function escapeHtml(s) {
 bindSourceSelector(async () => {
   updateSourceUi();
   document.getElementById('results').innerHTML = '';
+  currentResultItems = [];
+  expandedResultTrend = null;
   await loadQuickSeeds();
   await loadVolumeTrend();
 });

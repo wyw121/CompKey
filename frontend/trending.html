@@ -24,7 +24,10 @@
       <nav class="topnav">
         <a href="index.html">关键词推荐</a>
         <a class="active" href="trending.html">热词榜单</a>
-        <span class="source-badge" id="currentSourceLabel">P4 主库</span>
+        <label class="topbar-source" for="demoSourceTop">
+          <span>数据源</span>
+          <select id="demoSourceTop"></select>
+        </label>
       </nav>
     </header>
 
@@ -69,13 +72,6 @@
 
       <div class="filters">
         <div class="filter-block">
-          <label>数据源</label>
-          <select id="demoSource">
-            <option value="p4">P4 主库</option>
-            <option value="aol">AOL demo</option>
-          </select>
-        </div>
-        <div class="filter-block">
           <label>开始日期</label>
           <input id="startDate" type="date" />
         </div>
@@ -109,8 +105,24 @@
       </div>
       <div id="hotList" class="table-wrap"></div>
     </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">数据量趋势</div>
+          <div class="panel-note">按天统计当前数据源的相关数据总量，帮助你判断这个热词榜单背后的数据分布。</div>
+        </div>
+        <span class="source-badge" id="volumeStatus">等待加载...</span>
+      </div>
+      <div id="dataVolumeChart" class="chart-shell"></div>
+      <div class="source-row" style="margin-top:12px;">
+        <span class="tag">总量 <strong id="totalVolumeCount">--</strong></span>
+        <span class="tag">活跃天数 <strong id="activeDaysCount">--</strong></span>
+        <span class="tag">峰值日期 <strong id="peakDateLabel">--</strong></span>
+      </div>
+    </section>
   </div>
 
-  <script src="trending.js?v=8"></script>
+  <script src="trending.js?v=9"></script>
 </body>
 </html>

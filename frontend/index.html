@@ -21,7 +21,10 @@
       <nav class="topnav">
         <a class="active" href="index.html">关键词推荐</a>
         <a href="trending.html">热词榜单</a>
-        <span class="source-badge" id="currentSourceLabel">P4 主库</span>
+        <label class="topbar-source" for="demoSourceTop">
+          <span>数据源</span>
+          <select id="demoSourceTop"></select>
+        </label>
       </nav>
     </header>
 
@@ -51,10 +54,6 @@
             <span class="tag">快捷词 <strong id="quickSeedCount">0</strong></span>
             <span class="tag">推荐结果 <strong id="resultCount">0</strong></span>
             <span class="tag">最后刷新 <strong id="lastUpdated">--</strong></span>
-          </div>
-          <div class="filter-block source-picker">
-            <label for="demoSource">数据库</label>
-            <select id="demoSource"></select>
           </div>
         </div>
       </div>
@@ -114,18 +113,8 @@
       <div id="results" class="table-wrap"></div>
     </section>
 
-    <div id="trendModal" class="panel" style="display:none;">
-      <div class="panel-header">
-        <div>
-          <div class="panel-title" id="trendTitle"></div>
-          <div class="panel-note">趋势将在独立面板中展示，便于查看时间序列变化。</div>
-        </div>
-        <button id="closeTrend">关闭</button>
-      </div>
-      <div id="trendChart" class="chart-shell"></div>
-    </div>
   </div>
 
-  <script src="main.js?v=3"></script>
+  <script src="main.js?v=4"></script>
 </body>
 </html>

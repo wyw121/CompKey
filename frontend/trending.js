@@ -10,6 +10,7 @@ let currentHotItems = [];
 let currentWindowDays = 7;
 let expandedTrend = null;
 let chartInstance = null;
+let volumeChartInstance = null;
 
 function normalizeSource(source) {
   const key = String(source || 'p4').trim().toLowerCase();
@@ -44,7 +45,7 @@ function diffDaysInclusive(startIso, endIso) {
 }
 
 function ensureSourceOptions() {
-  const select = document.getElementById('demoSource');
+  const select = document.getElementById('demoSourceTop');
   if (!select) return;
   const allowed = new Set(SOURCE_OPTIONS.map(item => item.value));
   Array.from(select.options).forEach(opt => {
@@ -111,7 +112,7 @@ function setDateControlBounds(source) {
 }
 
 function updateSourceUi() {
-  const select = document.getElementById('demoSource');
+  const select = document.getElementById('demoSourceTop');
   if (!select) return;
   const current = getSelectedSource();
   select.value = current;
@@ -134,7 +135,7 @@ function syncDateInputs() {
 }
 
 function bindSourceSelector(onChange) {
-  const select = document.getElementById('demoSource');
+  const select = document.getElementById('demoSourceTop');
   if (!select) return;
   ensureSourceOptions();
   select.value = getSelectedSource();
@@ -193,6 +194,61 @@ function disposeInlineChart() {
   if (chartInstance) {
     chartInstance.dispose();
     chartInstance = null;
+  }
+}
+
+function updateVolumeSummary(payload) {
+  const totalEl = document.getElementById('totalVolumeCount');
+  const activeEl = document.getElementById('activeDaysCount');
+  const peakEl = document.getElementById('peakDateLabel');
+  if (totalEl) totalEl.textContent = String(payload?.total_volume ?? '--');
+  if (activeEl) activeEl.textContent = String(payload?.active_days ?? '--');
+  if (peakEl) peakEl.textContent = payload?.peak_day || '--';
+}
+
+function renderVolumeChart(payload) {
+  const box = document.getElementById('dataVolumeChart');
+  const status = document.getElementById('volumeStatus');
+  if (!box) return;
+  updateVolumeSummary(payload);
+  if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
+    box.innerHTML = '<div class="empty-state">暂无可展示的数据量趋势。</div>';
+    if (status) status.textContent = '无数据';
+    return;
+  }
+  if (status) status.textContent = `${payload.source || '数据源'} · ${payload.date_range?.start || '--'} ~ ${payload.date_range?.end || '--'}`;
+  const chart = volumeChartInstance || echarts.init(box);
+  volumeChartInstance = chart;
+  chart.setOption({
+    grid: { left: 48, right: 24, top: 26, bottom: 44 },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: payload.series.map(x => x.date), axisLabel: { color: '#6b7280' }, axisLine: { lineStyle: { color: '#d5dbe7' } } },
+    yAxis: { type: 'value', axisLabel: { color: '#6b7280' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
+    series: [{ type: 'line', data: payload.series.map(x => x.total_volume || 0), smooth: true, symbol: 'circle', symbolSize: 7, lineStyle: { width: 3, color: '#111827' }, itemStyle: { color: '#111827' }, areaStyle: { color: 'rgba(17, 24, 39, 0.08)' } }],
+  });
+}
+
+async function loadVolumeTrend() {
+  const box = document.getElementById('dataVolumeChart');
+  const status = document.getElementById('volumeStatus');
+  if (!box) return;
+  box.innerHTML = '<div class="empty-state">加载中...</div>';
+  if (status) status.textContent = '加载中...';
+  try {
+    const source = getSelectedSource();
+    const res = await fetch(`${API_BASE}/source_volume?source=${encodeURIComponent(source)}`);
+    if (!res.ok) {
+      const txt = await res.text();
+      box.innerHTML = `<div class="empty-state">数据量趋势加载失败：${escapeHtml(txt || res.statusText)}</div>`;
+      if (status) status.textContent = '加载失败';
+      updateVolumeSummary(null);
+      return;
+    }
+    renderVolumeChart(await res.json());
+  } catch (_) {
+    box.innerHTML = '<div class="empty-state">数据量趋势加载失败</div>';
+    if (status) status.textContent = '加载失败';
+    updateVolumeSummary(null);
   }
 }
 
@@ -361,6 +417,12 @@ document.getElementById('endDate').addEventListener('change', syncDateInputs);
 bindSourceSelector(async () => {
   updateSourceUi();
   await loadHotKeywords();
+  await loadVolumeTrend();
+});
+
+window.addEventListener('resize', () => {
+  if (chartInstance) chartInstance.resize();
+  if (volumeChartInstance) volumeChartInstance.resize();
 });
 
 (async () => {
@@ -369,4 +431,5 @@ bindSourceSelector(async () => {
   updateSourceUi();
   setDateControlBounds(getSelectedSource());
   await loadHotKeywords();
+  await loadVolumeTrend();
 })();
