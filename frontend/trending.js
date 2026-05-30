@@ -11,6 +11,7 @@ let currentWindowDays = 7;
 let expandedTrend = null;
 let chartInstance = null;
 let volumeChartInstance = null;
+let sourceVolumeCache = {};
 
 function normalizeSource(source) {
   const key = String(source || 'p4').trim().toLowerCase();
@@ -190,6 +191,19 @@ async function loadSourceCatalog() {
   }
 }
 
+async function getSourceVolume(source) {
+  const key = normalizeSource(source);
+  if (sourceVolumeCache[key]) return sourceVolumeCache[key];
+  const res = await fetch(`${API_BASE}/source_volume?source=${encodeURIComponent(key)}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || res.statusText);
+  }
+  const payload = await res.json();
+  sourceVolumeCache[key] = payload;
+  return payload;
+}
+
 function disposeInlineChart() {
   if (chartInstance) {
     chartInstance.dispose();
@@ -198,37 +212,109 @@ function disposeInlineChart() {
 }
 
 function updateVolumeSummary(payload) {
-  const totalEl = document.getElementById('totalVolumeCount');
-  const activeEl = document.getElementById('activeDaysCount');
-  const peakEl = document.getElementById('peakDateLabel');
-  if (totalEl) totalEl.textContent = String(payload?.total_volume ?? '--');
-  if (activeEl) activeEl.textContent = String(payload?.active_days ?? '--');
-  if (peakEl) peakEl.textContent = payload?.peak_day || '--';
+  const prevEl = document.getElementById('prevVolumeCount');
+  const currentEl = document.getElementById('currentVolumeCount');
+  const boundaryEl = document.getElementById('boundaryDateLabel');
+  if (prevEl) prevEl.textContent = String(payload?.prevTotalVolume ?? '--');
+  if (currentEl) currentEl.textContent = String(payload?.currentTotalVolume ?? '--');
+  if (boundaryEl) boundaryEl.textContent = payload?.boundaryDate || '--';
 }
 
-function renderVolumeChart(payload) {
+function buildWindowVolumeChart(payload, startDate, endDate) {
+  const seriesMap = new Map((payload?.series || []).map(item => [item.date, item]));
+  const selectedStart = dateFromIso(startDate);
+  const selectedEnd = dateFromIso(endDate);
+  if (!selectedStart || !selectedEnd) return null;
+
+  const windowDays = diffDaysInclusive(startDate, endDate);
+  const prevStart = addDays(selectedStart, -windowDays);
+  const prevEnd = addDays(selectedStart, -1);
+
+  const buildSeries = (fromDate, toDate) => {
+    const list = [];
+    let total = 0;
+    let activeDays = 0;
+    let d = fromDate;
+    while (d <= toDate) {
+      const ds = isoFromDate(d);
+      const item = seriesMap.get(ds) || { date: ds, total_volume: 0, keyword_count: 0 };
+      const totalVolume = Number(item.total_volume || 0);
+      total += totalVolume;
+      if (totalVolume > 0) activeDays += 1;
+      list.push({ date: ds, total_volume: totalVolume, keyword_count: Number(item.keyword_count || 0) });
+      d = addDays(d, 1);
+    }
+    return { list, total, activeDays };
+  };
+
+  const prev = buildSeries(prevStart, prevEnd);
+  const current = buildSeries(selectedStart, selectedEnd);
+  const sourceStart = payload?.date_range?.start || '';
+  const sourceEnd = payload?.date_range?.end || '';
+
+  return {
+    source: payload?.source,
+    sourceKey: payload?.source_key,
+    prevRange: { start: isoFromDate(prevStart), end: isoFromDate(prevEnd) },
+    currentRange: { start: isoFromDate(selectedStart), end: isoFromDate(selectedEnd) },
+    boundaryDate: isoFromDate(selectedStart),
+    prevTotalVolume: prev.total,
+    currentTotalVolume: current.total,
+    prevActiveDays: prev.activeDays,
+    currentActiveDays: current.activeDays,
+    sourceRange: { start: sourceStart, end: sourceEnd },
+    series: [...prev.list, ...current.list],
+  };
+}
+
+function renderVolumeChart(payload, startDate, endDate) {
   const box = document.getElementById('dataVolumeChart');
   const status = document.getElementById('volumeStatus');
   if (!box) return;
-  updateVolumeSummary(payload);
-  if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
+  const chartData = buildWindowVolumeChart(payload, startDate, endDate);
+  if (!chartData || !Array.isArray(chartData.series) || chartData.series.length === 0) {
     box.innerHTML = '<div class="empty-state">暂无可展示的数据量趋势。</div>';
     if (status) status.textContent = '无数据';
+    updateVolumeSummary(null);
     return;
   }
-  if (status) status.textContent = `${payload.source || '数据源'} · ${payload.date_range?.start || '--'} ~ ${payload.date_range?.end || '--'}`;
+  updateVolumeSummary(chartData);
+  if (status) status.textContent = `${chartData.source || '数据源'} · 前窗口 ${chartData.prevRange.start} ~ ${chartData.prevRange.end} / 当前窗口 ${chartData.currentRange.start} ~ ${chartData.currentRange.end}`;
   const chart = volumeChartInstance || echarts.init(box);
   volumeChartInstance = chart;
   chart.setOption({
-    grid: { left: 48, right: 24, top: 26, bottom: 44 },
+    grid: { left: 52, right: 24, top: 30, bottom: 44 },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: payload.series.map(x => x.date), axisLabel: { color: '#6b7280' }, axisLine: { lineStyle: { color: '#d5dbe7' } } },
+    xAxis: { type: 'category', data: chartData.series.map(x => x.date), axisLabel: { color: '#6b7280' }, axisLine: { lineStyle: { color: '#d5dbe7' } } },
     yAxis: { type: 'value', axisLabel: { color: '#6b7280' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
-    series: [{ type: 'line', data: payload.series.map(x => x.total_volume || 0), smooth: true, symbol: 'circle', symbolSize: 7, lineStyle: { width: 3, color: '#111827' }, itemStyle: { color: '#111827' }, areaStyle: { color: 'rgba(17, 24, 39, 0.08)' } }],
+    series: [{
+      type: 'line',
+      data: chartData.series.map(x => x.total_volume || 0),
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 7,
+      lineStyle: { width: 3, color: '#111827' },
+      itemStyle: { color: '#111827' },
+      areaStyle: { color: 'rgba(17, 24, 39, 0.08)' },
+      markLine: {
+        symbol: 'none',
+        label: { formatter: '窗口分界', color: '#b42318' },
+        lineStyle: { color: '#b42318', type: 'dashed', width: 2 },
+        data: [{ xAxis: chartData.boundaryDate }],
+      },
+      markArea: {
+        silent: true,
+        itemStyle: { color: 'rgba(17, 24, 39, 0.03)' },
+        data: [
+          [{ name: '前一窗口', xAxis: chartData.prevRange.start }, { xAxis: chartData.prevRange.end }],
+          [{ name: '当前窗口', xAxis: chartData.currentRange.start }, { xAxis: chartData.currentRange.end }],
+        ],
+      },
+    }],
   });
 }
 
-async function loadVolumeTrend() {
+async function loadVolumeTrend(startDate, endDate) {
   const box = document.getElementById('dataVolumeChart');
   const status = document.getElementById('volumeStatus');
   if (!box) return;
@@ -236,15 +322,8 @@ async function loadVolumeTrend() {
   if (status) status.textContent = '加载中...';
   try {
     const source = getSelectedSource();
-    const res = await fetch(`${API_BASE}/source_volume?source=${encodeURIComponent(source)}`);
-    if (!res.ok) {
-      const txt = await res.text();
-      box.innerHTML = `<div class="empty-state">数据量趋势加载失败：${escapeHtml(txt || res.statusText)}</div>`;
-      if (status) status.textContent = '加载失败';
-      updateVolumeSummary(null);
-      return;
-    }
-    renderVolumeChart(await res.json());
+    const payload = await getSourceVolume(source);
+    renderVolumeChart(payload, startDate, endDate);
   } catch (_) {
     box.innerHTML = '<div class="empty-state">数据量趋势加载失败</div>';
     if (status) status.textContent = '加载失败';
@@ -297,6 +376,7 @@ async function loadHotKeywords() {
     currentWindowDays = diffDaysInclusive(startDate, endDate);
     renderHotList(items, currentWindowDays);
     updateTopMeta(payload, selectedSource);
+    await loadVolumeTrend(startDate, endDate);
   } catch (e) {
     showError(await classifyFetchFailure());
   }
@@ -417,7 +497,6 @@ document.getElementById('endDate').addEventListener('change', syncDateInputs);
 bindSourceSelector(async () => {
   updateSourceUi();
   await loadHotKeywords();
-  await loadVolumeTrend();
 });
 
 window.addEventListener('resize', () => {
@@ -431,5 +510,4 @@ window.addEventListener('resize', () => {
   updateSourceUi();
   setDateControlBounds(getSelectedSource());
   await loadHotKeywords();
-  await loadVolumeTrend();
 })();

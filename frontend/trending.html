@@ -94,6 +94,23 @@
       </div>
     </section>
 
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">数据量趋势</div>
+          <div class="panel-note">按天统计前后两个窗口的总量，并用分界线标出当前窗口起点，方便对比整体分布。</div>
+        </div>
+        <span class="source-badge" id="volumeStatus">等待加载...</span>
+      </div>
+      <div id="dataVolumeChart" class="chart-shell"></div>
+      <div class="source-row" style="margin-top:12px;">
+        <span class="tag">前一窗口总量 <strong id="prevVolumeCount">--</strong></span>
+        <span class="tag">当前窗口总量 <strong id="currentVolumeCount">--</strong></span>
+        <span class="tag">分界日期 <strong id="boundaryDateLabel">--</strong></span>
+      </div>
+      <div class="footer-note">注：若某一天显示 0，表示该日期在源表中没有记录，而不是统计漏算。</div>
+    </section>
+
     <div id="errorBox" class="error-box"></div>
 
     <section class="panel">
@@ -104,22 +121,6 @@
         </div>
       </div>
       <div id="hotList" class="table-wrap"></div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <div class="panel-title">数据量趋势</div>
-          <div class="panel-note">按天统计当前数据源的相关数据总量，帮助你判断这个热词榜单背后的数据分布。</div>
-        </div>
-        <span class="source-badge" id="volumeStatus">等待加载...</span>
-      </div>
-      <div id="dataVolumeChart" class="chart-shell"></div>
-      <div class="source-row" style="margin-top:12px;">
-        <span class="tag">总量 <strong id="totalVolumeCount">--</strong></span>
-        <span class="tag">活跃天数 <strong id="activeDaysCount">--</strong></span>
-        <span class="tag">峰值日期 <strong id="peakDateLabel">--</strong></span>
-      </div>
     </section>
   </div>
 
