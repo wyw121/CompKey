@@ -3,64 +3,111 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CompKey - 热词榜单（Demo）</title>
+  <title>CompKey | 热词榜单</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <style>
-    body { font-family: Arial, Helvetica, sans-serif; margin: 20px }
-    table { border-collapse: collapse; width: 100%; margin-top: 12px }
-    th, td { border: 1px solid #ddd; padding: 8px }
-    th { background: #f4f4f4 }
-    .muted { color: #666; font-size: 12px }
-  </style>
+  <link rel="stylesheet" href="styles.css?v=1" />
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
 </head>
 <body>
-  <h2>热词榜单（Demo）</h2>
-  <div class="muted" style="margin-bottom:12px;line-height:1.6">
-    <div>数据来源：<span id="dataSource">等待加载...</span></div>
-    <div>时间范围：<span id="dataRange">等待加载...</span></div>
-    <div>最后刷新时间：<span id="updatedAt">等待加载...</span></div>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">CompKey</div>
+          <div class="brand-subtitle">Hot keyword ranking</div>
+        </div>
+      </div>
+      <nav class="topnav">
+        <a href="index.html">关键词推荐</a>
+        <a class="active" href="trending.html">热词榜单</a>
+        <span class="source-badge" id="currentSourceLabel">P4 主库</span>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>热词榜单</h1>
+          <p>
+            选择一个真实有数据的时间窗口，系统会在选定区间内按搜索量展示榜单，并自动与前一窗口做对比。
+            趋势图会直接展开在你点中的那一行下面，方便一边看排名，一边看时间变化。
+          </p>
+          <div class="hero-meta">
+            <span class="pill">内联趋势展开</span>
+            <span class="pill">自定义时间范围</span>
+            <span class="pill">企业级信息层级</span>
+          </div>
+        </div>
+        <div class="panel" style="margin:0;padding:18px;">
+          <div class="panel-header" style="margin-bottom:10px">
+            <div>
+              <div class="panel-title">数据概览</div>
+              <div class="panel-note" id="sourceDescription">等待加载...</div>
+            </div>
+            <span class="source-badge" id="dataSource">等待加载...</span>
+          </div>
+          <div class="source-row">
+            <span class="tag">选定区间 <strong id="dataRange">等待加载...</strong></span>
+            <span class="tag">对比区间 <strong id="comparisonRange">等待加载...</strong></span>
+            <span class="tag">刷新 <strong id="updatedAt">等待加载...</strong></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">筛选器</div>
+          <div class="panel-note">时间范围会根据当前数据源的边界自动限制，只能选择有真实数据的窗口。</div>
+        </div>
+      </div>
+
+      <div class="filters">
+        <div class="filter-block">
+          <label>数据源</label>
+          <select id="demoSource">
+            <option value="p4">P4 主库</option>
+            <option value="aol">AOL demo</option>
+          </select>
+        </div>
+        <div class="filter-block">
+          <label>开始日期</label>
+          <input id="startDate" type="date" />
+        </div>
+        <div class="filter-block">
+          <label>结束日期</label>
+          <input id="endDate" type="date" />
+        </div>
+        <div class="filter-block">
+          <label>展示数量</label>
+          <select id="limit">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+        <button id="refreshBtn" class="primary">刷新榜单</button>
+      </div>
+    </section>
+
+    <div id="errorBox" class="error-box"></div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">热词排行榜</div>
+          <div class="panel-note">点击“查看趋势”，图表会直接展开在当前行下方。</div>
+        </div>
+      </div>
+      <div id="hotList" class="table-wrap"></div>
+    </section>
   </div>
-  <div style="margin-bottom:10px">
-    <a href="index.html">关键词推荐</a>
-    |
-    <a href="trending.html">时下流行关键词</a>
-    |
-    <label style="margin-left:8px">Demo 源：
-      <select id="demoSource">
-        <option value="edgar">EDGAR demo</option>
-        <option value="aol">AOL demo</option>
-      </select>
-    </label>
-  </div>
 
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <label>时间窗口（天）：
-      <select id="windowDays">
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="7" selected>7</option>
-      </select>
-    </label>
-    <label>展示数量：
-      <select id="limit">
-        <option value="10">10</option>
-        <option value="20" selected>20</option>
-        <option value="50">50</option>
-      </select>
-    </label>
-    <button id="refreshBtn">刷新榜单</button>
-  </div>
-
-  <div id="errorBox" style="display:none;margin-top:10px;padding:8px;border:1px solid #f1b5b5;background:#fff5f5;color:#9b1c1c"></div>
-
-  <div id="hotList"></div>
-
-  <div id="trendPanel" style="display:none;margin-top:16px;">
-    <h3 id="trendTitle"></h3>
-    <div id="trendChart" style="height:320px"></div>
-  </div>
-
-  <script src="trending.js?v=2"></script>
+  <script src="trending.js?v=6"></script>
 </body>
 </html>

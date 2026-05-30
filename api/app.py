@@ -44,6 +44,11 @@ CONFIG_PATH_DEFAULT = os.path.join(os.path.dirname(__file__), '..', 'config', 'c
 APP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 DEFAULT_DEMO_SOURCES = {
+    'p4': {
+        'label': 'P4 主库',
+        'description': '主项目历史数据集，覆盖 2006-08 的中文关键词时间序列与竞争词结果，适合查看原始主库效果。',
+        'db_path': './compkey_p4.sqlite3',
+    },
     'edgar': {
         'label': 'EDGAR demo',
         'description': '近年公开检索/访问日志',
@@ -51,7 +56,7 @@ DEFAULT_DEMO_SOURCES = {
     },
     'aol': {
         'label': 'AOL demo',
-        'description': '经典 query log（用户会话集合）',
+        'description': '经典英文 query log 用户会话集合，覆盖 2006-03 至 2006-05，适合观察搜索行为和热词趋势。',
         'db_path': './compkey_aol_demo.sqlite3',
     },
 }
@@ -113,11 +118,11 @@ def get_demo_source_configs() -> Dict[str, Dict[str, str]]:
 
 def normalize_demo_source(source: Optional[str]) -> str:
     cfg = load_config()
-    default_source = str(cfg.get('default_demo_source', 'edgar')).strip().lower() or 'edgar'
+    default_source = str(cfg.get('default_demo_source', 'p4')).strip().lower() or 'p4'
     key = str(source or default_source).strip().lower()
     configs = get_demo_source_configs()
     if key not in configs:
-        return default_source if default_source in configs else 'edgar'
+        return default_source if default_source in configs else 'p4'
     return key
 
 
@@ -137,6 +142,28 @@ def get_db_conn(source: Optional[str] = None):
     conn = sqlite3.connect(profile['db_path'])
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_keyword_time_bounds(conn: sqlite3.Connection) -> Dict[str, Optional[str]]:
+    cur = conn.cursor()
+    cur.execute('SELECT MIN(date) AS min_date, MAX(date) AS max_date, COUNT(*) AS row_count FROM keyword_timeseries')
+    row = cur.fetchone()
+    if not row:
+        return {'date_start': None, 'date_end': None, 'time_series_rows': 0}
+    return {
+        'date_start': row['min_date'] if row['min_date'] else None,
+        'date_end': row['max_date'] if row['max_date'] else None,
+        'time_series_rows': int(row['row_count'] or 0),
+    }
+
+
+def parse_date_value(value: Optional[str]):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return datetime.strptime(text, '%Y-%m-%d').date()
 
 
 class RecommendItem(BaseModel):
@@ -165,6 +192,9 @@ class DemoSourceItem(BaseModel):
     label: str
     description: str
     db_exists: bool
+    date_start: Optional[str] = None
+    date_end: Optional[str] = None
+    time_series_rows: int = 0
 
 
 class DemoSourceList(BaseModel):
@@ -175,16 +205,32 @@ class DemoSourceList(BaseModel):
 @app.get('/sources', response_model=DemoSourceList)
 def demo_sources():
     cfg = load_config()
-    default_source = normalize_demo_source(cfg.get('default_demo_source', 'edgar'))
+    default_source = normalize_demo_source(cfg.get('default_demo_source', 'p4'))
     items = []
     for key, profile in get_demo_source_configs().items():
         db_path = project_path(profile.get('db_path', ''))
+        date_start = None
+        date_end = None
+        time_series_rows = 0
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                bounds = get_keyword_time_bounds(conn)
+                date_start = bounds['date_start']
+                date_end = bounds['date_end']
+                time_series_rows = bounds['time_series_rows']
+            finally:
+                conn.close()
         items.append(
             DemoSourceItem(
                 source=key,
                 label=profile.get('label', key),
                 description=profile.get('description', ''),
                 db_exists=os.path.exists(db_path),
+                date_start=date_start,
+                date_end=date_end,
+                time_series_rows=time_series_rows,
             )
         )
     return DemoSourceList(default_source=default_source, items=items)
@@ -259,9 +305,9 @@ def trend(keyword: str, days: int = 90, source: str = 'edgar'):
 
 
 @app.get('/hot_keywords')
-def hot_keywords(limit: int = 20, window_days: int = 7, source: str = 'edgar'):
+def hot_keywords(limit: int = 20, window_days: int = 7, start_date: Optional[str] = None, end_date: Optional[str] = None, source: str = 'p4'):
     """
-    返回“时下流行”关键词榜单：按最近 window_days 相比前一窗口的增长率排序。
+    返回热词榜单：按选定时间窗口的搜索量排序，并对比前一等长窗口的变化情况。
     """
     if limit <= 0:
         raise HTTPException(status_code=400, detail='limit must be positive')
@@ -275,15 +321,46 @@ def hot_keywords(limit: int = 20, window_days: int = 7, source: str = 'edgar'):
     conn = get_db_conn(profile['source'])
     cur = conn.cursor()
 
-    cur.execute('SELECT MAX(date) AS max_date FROM keyword_timeseries')
-    max_row = cur.fetchone()
-    if max_row and max_row['max_date']:
-        end_date = datetime.strptime(max_row['max_date'], '%Y-%m-%d').date()
+    bounds = get_keyword_time_bounds(conn)
+    source_start = parse_date_value(bounds['date_start'])
+    source_end = parse_date_value(bounds['date_end'])
+    if source_start is None or source_end is None:
+        conn.close()
+        return {
+            'items': [],
+            'source': profile['label'],
+            'source_key': profile['source'],
+            'date_range': {'start': None, 'end': None},
+            'comparison_range': {'start': None, 'end': None},
+            'window_days': 0,
+        }
+
+    requested_start = parse_date_value(start_date)
+    requested_end = parse_date_value(end_date)
+
+    if requested_start is not None or requested_end is not None:
+        if requested_start is None or requested_end is None:
+            conn.close()
+            raise HTTPException(status_code=400, detail='start_date and end_date must be provided together')
+        if requested_start > requested_end:
+            conn.close()
+            raise HTTPException(status_code=400, detail='start_date must be earlier than or equal to end_date')
+        if requested_start < source_start or requested_end > source_end:
+            conn.close()
+            raise HTTPException(status_code=400, detail='selected date range is outside available data range')
+        recent_start = requested_start
+        end_date = requested_end
     else:
-        end_date = datetime.utcnow().date()
-    recent_start = end_date - timedelta(days=window_days - 1)
+        end_date = source_end
+        recent_start = end_date - timedelta(days=window_days - 1)
+        if recent_start < source_start:
+            recent_start = source_start
+
+    selected_window_days = (end_date - recent_start).days + 1
     prev_end = recent_start - timedelta(days=1)
-    prev_start = prev_end - timedelta(days=window_days - 1)
+    prev_start = prev_end - timedelta(days=selected_window_days - 1)
+    if prev_start < source_start:
+        prev_start = source_start
 
     cur.execute(
         '''
@@ -329,7 +406,11 @@ def hot_keywords(limit: int = 20, window_days: int = 7, source: str = 'edgar'):
             'start': recent_start.isoformat(),
             'end': end_date.isoformat(),
         },
-        'window_days': window_days,
+        'comparison_range': {
+            'start': prev_start.isoformat(),
+            'end': prev_end.isoformat(),
+        },
+        'window_days': selected_window_days,
     }
 
 

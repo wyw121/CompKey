@@ -3,54 +3,109 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CompKey Demo</title>
+  <title>CompKey | 关键词推荐</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <style>
-    body { font-family: Arial, Helvetica, sans-serif; margin: 20px }
-    #results { margin-top: 20px }
-    table { border-collapse: collapse; width: 100% }
-    th, td { border: 1px solid #ddd; padding: 8px }
-    th { background: #f4f4f4 }
-  </style>
+  <link rel="stylesheet" href="styles.css?v=1" />
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.2/dist/echarts.min.js"></script>
 </head>
 <body>
-  <h2>竞争性关键词推荐（Demo）</h2>
-  <div class="muted" style="margin-bottom:8px;color:#666;font-size:13px">
-    当前数据源：<span id="currentSourceLabel">EDGAR demo</span>
-  </div>
-  <div style="margin-bottom:10px">
-    <a href="index.html">关键词推荐</a>
-    |
-    <a href="trending.html">时下流行关键词</a>
-    |
-    <label style="margin-left:8px">Demo 源：
-      <select id="demoSource">
-        <option value="edgar">EDGAR demo</option>
-        <option value="aol">AOL demo</option>
-      </select>
-    </label>
-  </div>
-  <div>
-    <input id="seedInput" placeholder="输入种子词，例如: 苹果 手机" style="width:300px;padding:6px" />
-    <button id="searchBtn">查询</button>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">CompKey</div>
+          <div class="brand-subtitle">Keyword competition intelligence</div>
+        </div>
+      </div>
+      <nav class="topnav">
+        <a class="active" href="index.html">关键词推荐</a>
+        <a href="trending.html">热词榜单</a>
+        <span class="source-badge" id="currentSourceLabel">P4 主库</span>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="hero-grid">
+        <div>
+          <h1>竞争性关键词推荐</h1>
+          <p>
+            以种子词为入口，快速发现相关候选词、竞争强度和时间趋势。
+            界面采用更克制的企业级信息层级，适合做演示、汇报和分析。
+          </p>
+          <div class="hero-meta">
+            <span class="pill">主库：P4</span>
+            <span class="pill">支持 AOL demo</span>
+            <span class="pill">趋势可视化</span>
+          </div>
+        </div>
+        <div class="panel" style="margin:0;padding:18px;">
+          <div class="panel-header" style="margin-bottom:10px">
+            <div>
+              <div class="panel-title">当前数据源</div>
+              <div class="panel-note" id="currentSourceDesc">加载中...</div>
+            </div>
+            <span class="source-badge" id="currentSourceLabelCard">P4 主库</span>
+          </div>
+          <div class="source-row">
+            <span class="tag">快捷词 <strong id="quickSeedCount">0</strong></span>
+            <span class="tag">推荐结果 <strong id="resultCount">0</strong></span>
+            <span class="tag">最后刷新 <strong id="lastUpdated">--</strong></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">种子词查询</div>
+          <div class="panel-note">输入一个种子词，系统会返回高竞争度候选词，并可进一步查看趋势。</div>
+        </div>
+      </div>
+
+      <div class="search-panel">
+        <div class="search-input">
+          <input id="seedInput" type="text" placeholder="输入种子词，例如：苹果 手机" />
+        </div>
+        <button id="searchBtn" class="primary">查询</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">快捷热词</div>
+          <div class="panel-note">点击即可直接查询，适合快速浏览候选词生态。</div>
+        </div>
+      </div>
+      <div id="quickSeeds" class="chip-cloud"></div>
+    </section>
+
+    <div id="errorBox" class="error-box"></div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">推荐结果</div>
+          <div class="panel-note">查看每个候选词的竞争度、频次和 PMI，并可打开趋势。</div>
+        </div>
+      </div>
+      <div id="results" class="table-wrap"></div>
+    </section>
+
+    <div id="trendModal" class="panel" style="display:none;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title" id="trendTitle"></div>
+          <div class="panel-note">趋势将在独立面板中展示，便于查看时间序列变化。</div>
+        </div>
+        <button id="closeTrend">关闭</button>
+      </div>
+      <div id="trendChart" class="chart-shell"></div>
+    </div>
   </div>
 
-  <div style="margin-top:12px">
-    <div style="font-size:13px;color:#666;margin-bottom:6px">快捷热词（点击直接搜索）</div>
-    <div id="quickSeeds" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-  </div>
-
-  <div id="errorBox" style="display:none;margin-top:10px;padding:8px;border:1px solid #f1b5b5;background:#fff5f5;color:#9b1c1c"></div>
-
-  <div id="results"></div>
-
-  <div id="trendModal" style="display:none;margin-top:20px">
-    <h3 id="trendTitle"></h3>
-    <div id="trendChart" style="height:320px"></div>
-    <button id="closeTrend">关闭趋势</button>
-  </div>
-
-  <script src="main.js"></script>
+  <script src="main.js?v=2"></script>
 </body>
 </html>

@@ -1,16 +1,72 @@
 const API_BASE = 'http://127.0.0.1:8000'
 const SOURCE_STORAGE_KEY = 'compkeyDemoSource';
+let sourceCatalog = {};
+
+function normalizeSource(source) {
+  const key = String(source || 'p4').trim().toLowerCase();
+  return ['p4', 'aol'].includes(key) ? key : 'p4';
+}
+
+function getSourceMeta(source) {
+  return sourceCatalog[normalizeSource(source)] || {
+    source: normalizeSource(source),
+    label: getSourceLabel(source),
+    description: '',
+  };
+}
+
+async function loadSourceCatalog() {
+  try {
+    const res = await fetch(`${API_BASE}/sources`);
+    if (!res.ok) return;
+    const payload = await res.json();
+    sourceCatalog = {};
+    for (const item of payload.items || []) {
+      if (!['p4', 'aol'].includes(item.source)) continue;
+      sourceCatalog[item.source] = item;
+    }
+  } catch (_) {
+    sourceCatalog = {};
+  }
+}
+
+function updateSourceCards() {
+  const current = getSelectedSource();
+  const meta = getSourceMeta(current);
+  const badge = document.getElementById('currentSourceLabel');
+  const badgeCard = document.getElementById('currentSourceLabelCard');
+  const desc = document.getElementById('currentSourceDesc');
+  if (badge) badge.textContent = meta.label || getSourceLabel(current);
+  if (badgeCard) badgeCard.textContent = meta.label || getSourceLabel(current);
+  if (desc) desc.textContent = meta.description || '暂无说明';
+}
+
+function setQuickCount(count) {
+  const el = document.getElementById('quickSeedCount');
+  if (el) el.textContent = String(count);
+}
+
+function setResultCount(count) {
+  const el = document.getElementById('resultCount');
+  if (el) el.textContent = String(count);
+}
+
+function setLastUpdated() {
+  const el = document.getElementById('lastUpdated');
+  if (el) el.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 function getSelectedSource() {
-  return localStorage.getItem(SOURCE_STORAGE_KEY) || 'edgar';
+  return normalizeSource(localStorage.getItem(SOURCE_STORAGE_KEY));
 }
 
 function setSelectedSource(source) {
-  localStorage.setItem(SOURCE_STORAGE_KEY, source);
+  localStorage.setItem(SOURCE_STORAGE_KEY, normalizeSource(source));
 }
 
 function getSourceLabel(source) {
-  return source === 'aol' ? 'AOL demo' : 'EDGAR demo';
+  if (source === 'aol') return 'AOL demo';
+  return 'P4 主库';
 }
 
 function updateSourceUi() {
@@ -18,8 +74,7 @@ function updateSourceUi() {
   if (!select) return;
   const current = getSelectedSource();
   select.value = current;
-  const label = document.getElementById('currentSourceLabel');
-  if (label) label.textContent = getSourceLabel(current);
+  updateSourceCards();
 }
 
 function bindSourceSelector(onChange) {
@@ -38,26 +93,29 @@ function bindSourceSelector(onChange) {
 async function loadQuickSeeds() {
   const box = document.getElementById('quickSeeds');
   if (!box) return;
-  box.innerHTML = '<span style="color:#888">加载中...</span>';
+  box.innerHTML = '<span class="muted">加载中...</span>';
   try {
     const source = getSelectedSource();
     const res = await fetch(`${API_BASE}/seed_suggestions?limit=12&source=${encodeURIComponent(source)}`);
     if (!res.ok) {
       const txt = await res.text();
-      box.innerHTML = `<span style="color:#b91c1c">快捷热词加载失败：${escapeHtml(txt || res.statusText)}</span>`;
+      box.innerHTML = `<span class="muted" style="color:#b42318">快捷热词加载失败：${escapeHtml(txt || res.statusText)}</span>`;
+      setQuickCount(0);
       return;
     }
     const payload = await res.json();
     const items = Array.isArray(payload) ? payload : (payload.items || []);
     if (!items.length) {
-      box.innerHTML = '<span style="color:#888">暂无可用热词</span>';
+      box.innerHTML = '<span class="muted">暂无可用热词</span>';
+      setQuickCount(0);
       return;
     }
     box.innerHTML = items.map(it => `
-      <button class="quickSeedBtn" data-seed="${escapeHtml(it.seed)}" style="padding:6px 10px;border:1px solid #ddd;background:#fafafa;border-radius:16px;cursor:pointer">
+      <button class="quickSeedBtn" data-seed="${escapeHtml(it.seed)}">
         ${escapeHtml(it.seed)}
       </button>
     `).join('');
+    setQuickCount(items.length);
     box.querySelectorAll('.quickSeedBtn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const seed = btn.dataset.seed || '';
@@ -65,8 +123,10 @@ async function loadQuickSeeds() {
         await runSearch(seed);
       });
     });
+    setLastUpdated();
   } catch (err) {
-    box.innerHTML = '<span style="color:#b91c1c">快捷热词加载失败</span>';
+    box.innerHTML = '<span class="muted" style="color:#b42318">快捷热词加载失败</span>';
+    setQuickCount(0);
   }
 }
 
@@ -112,6 +172,8 @@ async function runSearch(seedOverride) {
     }
     const data = await res.json();
     renderResults(data);
+    setResultCount(Array.isArray(data) ? data.length : 0);
+    setLastUpdated();
   } catch (err) {
     showError(await classifyFetchFailure(err));
   }
@@ -124,12 +186,12 @@ document.getElementById('searchBtn').addEventListener('click', async () => {
 function renderResults(items) {
   const div = document.getElementById('results');
   if (!items || items.length === 0) {
-    div.innerHTML = '<p>未找到候选词。</p>';
+    div.innerHTML = '<div class="empty-state">未找到候选词。</div>';
     return;
   }
   let html = '<table><thead><tr><th>候选词</th><th>竞争度</th><th>频次</th><th>PMI</th><th>趋势</th></tr></thead><tbody>';
   for (const it of items) {
-    html += `<tr><td>${escapeHtml(it.candidate)}</td><td>${it.competition.toFixed(3)}</td><td>${it.freq}</td><td>${it.pmi.toFixed(3)}</td><td><button class="trendBtn" data-keyword="${escapeHtml(it.candidate)}">查看趋势</button></td></tr>`;
+    html += `<tr><td><strong>${escapeHtml(it.candidate)}</strong></td><td>${it.competition.toFixed(3)}</td><td>${it.freq}</td><td>${it.pmi.toFixed(3)}</td><td><button class="row-action trendBtn" data-keyword="${escapeHtml(it.candidate)}">查看趋势</button></td></tr>`;
   }
   html += '</tbody></table>';
   div.innerHTML = html;
@@ -185,5 +247,9 @@ bindSourceSelector(async () => {
   document.getElementById('results').innerHTML = '';
   await loadQuickSeeds();
 });
-updateSourceUi();
-loadQuickSeeds();
+
+(async () => {
+  await loadSourceCatalog();
+  updateSourceUi();
+  await loadQuickSeeds();
+})();

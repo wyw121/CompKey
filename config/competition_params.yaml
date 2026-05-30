@@ -8,13 +8,13 @@ ema_alpha: 0.3
 rolling_days: 7
 growth_smoothing: 5
 db_path: "./compkey_p4.sqlite3"
-default_demo_source: "edgar"
+default_demo_source: "p4"
 demo_sources:
-  edgar:
-    label: "EDGAR demo"
-    description: "近年公开检索/访问日志"
-    db_path: "./compkey_demo.sqlite3"
+  p4:
+    label: "P4 主库"
+    description: "主项目历史数据集，覆盖 2006-08 的中文关键词时间序列与竞争词结果，适合查看原始主库效果。"
+    db_path: "./compkey_p4.sqlite3"
   aol:
     label: "AOL demo"
-    description: "经典 query log（用户会话集合）"
+    description: "经典英文 query log 用户会话集合，覆盖 2006-03 至 2006-05，适合观察搜索行为和热词趋势。"
     db_path: "./compkey_aol_demo.sqlite3"

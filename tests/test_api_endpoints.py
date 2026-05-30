@@ -30,9 +30,9 @@ def test_api_recommend_and_trend(tmp_path):
     cfg_dst = tmp_path / 'competition_params.yaml'
     shutil.copy(cfg_src, cfg_dst)
     # modify dst to point to our db
-    txt = cfg_dst.read_text()
+    txt = cfg_dst.read_text(encoding='utf-8-sig')
     txt = txt.replace('db_path: "./compkey_p4.sqlite3"', f'db_path: "{str(dbpath).replace("\\","/" )}"')
-    cfg_dst.write_text(txt)
+    cfg_dst.write_text(txt, encoding='utf-8-sig')
     # point the API to this temporary config
     os.environ['COMPKY_CONFIG'] = str(cfg_dst)
 
