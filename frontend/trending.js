@@ -5,6 +5,10 @@ const SOURCE_OPTIONS = [
   { value: 'aol', label: 'AOL demo' },
 ];
 
+if (!document.getElementById('startDate') && !new URLSearchParams(location.search).has('ts')) {
+  location.replace('trending.html?ts=20260530_1508');
+}
+
 let sourceCatalog = {};
 let currentHotItems = [];
 let currentWindowDays = 7;
