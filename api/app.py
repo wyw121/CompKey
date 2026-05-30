@@ -414,6 +414,81 @@ def hot_keywords(limit: int = 20, window_days: int = 7, start_date: Optional[str
     }
 
 
+@app.get('/source_volume')
+def source_volume(source: str = 'p4'):
+    profile = get_demo_source_profile(source)
+    conn = get_db_conn(profile['source'])
+    cur = conn.cursor()
+
+    bounds = get_keyword_time_bounds(conn)
+    source_start = parse_date_value(bounds['date_start'])
+    source_end = parse_date_value(bounds['date_end'])
+    if source_start is None or source_end is None:
+        conn.close()
+        return {
+            'source': profile['label'],
+            'source_key': profile['source'],
+            'date_range': {'start': None, 'end': None},
+            'series': [],
+            'total_volume': 0,
+            'active_days': 0,
+            'peak_day': None,
+            'peak_volume': 0,
+        }
+
+    cur.execute(
+        '''
+        SELECT
+            date,
+            SUM(freq) AS total_volume,
+            COUNT(DISTINCT keyword) AS keyword_count
+        FROM keyword_timeseries
+        GROUP BY date
+        ORDER BY date
+        '''
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    day_map = {
+        row['date']: {
+            'date': row['date'],
+            'total_volume': int(row['total_volume'] or 0),
+            'keyword_count': int(row['keyword_count'] or 0),
+        }
+        for row in rows
+    }
+
+    series = []
+    total_volume = 0
+    peak_day = None
+    peak_volume = 0
+    d = source_start
+    while d <= source_end:
+        ds = d.isoformat()
+        item = day_map.get(ds, {'date': ds, 'total_volume': 0, 'keyword_count': 0})
+        total_volume += int(item['total_volume'])
+        if item['total_volume'] >= peak_volume:
+            peak_volume = int(item['total_volume'])
+            peak_day = ds
+        series.append(item)
+        d += timedelta(days=1)
+
+    return {
+        'source': profile['label'],
+        'source_key': profile['source'],
+        'date_range': {
+            'start': source_start.isoformat(),
+            'end': source_end.isoformat(),
+        },
+        'series': series,
+        'total_volume': int(total_volume),
+        'active_days': len(rows),
+        'peak_day': peak_day,
+        'peak_volume': int(peak_volume),
+    }
+
+
 @app.get('/seed_suggestions', response_model=List[SeedSuggestionItem])
 def seed_suggestions(limit: int = 12, source: str = 'edgar'):
     if limit <= 0:

@@ -1,6 +1,11 @@
 const API_BASE = 'http://127.0.0.1:8000'
 const SOURCE_STORAGE_KEY = 'compkeyDemoSource';
+const SOURCE_OPTIONS = [
+  { value: 'p4', label: 'P4 主库' },
+  { value: 'aol', label: 'AOL demo' },
+];
 let sourceCatalog = {};
+let volumeChartInstance = null;
 
 function normalizeSource(source) {
   const key = String(source || 'p4').trim().toLowerCase();
@@ -22,12 +27,29 @@ async function loadSourceCatalog() {
     const payload = await res.json();
     sourceCatalog = {};
     for (const item of payload.items || []) {
-      if (!['p4', 'aol'].includes(item.source)) continue;
       sourceCatalog[item.source] = item;
     }
+    renderSourceSelector();
+    updateSourceUi();
   } catch (_) {
     sourceCatalog = {};
+    renderSourceSelector();
   }
+}
+
+function renderSourceSelector() {
+  const select = document.getElementById('demoSource');
+  if (!select) return;
+  const options = SOURCE_OPTIONS
+    .map(item => {
+      const meta = sourceCatalog[item.value];
+      return {
+        value: item.value,
+        label: meta?.label || item.label,
+      };
+    });
+  select.innerHTML = options.map(item => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join('');
+  select.value = getSelectedSource();
 }
 
 function updateSourceCards() {
@@ -39,6 +61,84 @@ function updateSourceCards() {
   if (badge) badge.textContent = meta.label || getSourceLabel(current);
   if (badgeCard) badgeCard.textContent = meta.label || getSourceLabel(current);
   if (desc) desc.textContent = meta.description || '暂无说明';
+}
+
+function updateVolumeSummary(payload) {
+  const totalEl = document.getElementById('totalVolumeCount');
+  const activeEl = document.getElementById('activeDaysCount');
+  const peakEl = document.getElementById('peakDateLabel');
+  if (totalEl) totalEl.textContent = String(payload?.total_volume ?? '--');
+  if (activeEl) activeEl.textContent = String(payload?.active_days ?? '--');
+  if (peakEl) peakEl.textContent = payload?.peak_day || '--';
+}
+
+function renderVolumeChart(payload) {
+  const box = document.getElementById('dataVolumeChart');
+  const status = document.getElementById('volumeStatus');
+  if (!box) return;
+  updateVolumeSummary(payload);
+  if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) {
+    box.innerHTML = '<div class="empty-state">暂无可展示的数据量趋势。</div>';
+    if (status) status.textContent = '无数据';
+    return;
+  }
+
+  if (status) status.textContent = `${payload.source || '数据源'} · ${payload.date_range?.start || '--'} ~ ${payload.date_range?.end || '--'}`;
+
+  const chart = volumeChartInstance || echarts.init(box);
+  volumeChartInstance = chart;
+  const dates = payload.series.map(item => item.date);
+  const volumes = payload.series.map(item => item.total_volume || 0);
+  chart.setOption({
+    grid: { left: 48, right: 24, top: 26, bottom: 44 },
+    tooltip: { trigger: 'axis' },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLabel: { color: '#6b7280' },
+      axisLine: { lineStyle: { color: '#d5dbe7' } },
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { color: '#6b7280' },
+      splitLine: { lineStyle: { color: '#eef2f7' } },
+    },
+    series: [{
+      type: 'line',
+      data: volumes,
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 7,
+      lineStyle: { width: 3, color: '#111827' },
+      itemStyle: { color: '#111827' },
+      areaStyle: { color: 'rgba(17, 24, 39, 0.08)' },
+    }],
+  });
+}
+
+async function loadVolumeTrend() {
+  const box = document.getElementById('dataVolumeChart');
+  const status = document.getElementById('volumeStatus');
+  if (!box) return;
+  box.innerHTML = '<div class="empty-state">加载中...</div>';
+  if (status) status.textContent = '加载中...';
+  try {
+    const source = getSelectedSource();
+    const res = await fetch(`${API_BASE}/source_volume?source=${encodeURIComponent(source)}`);
+    if (!res.ok) {
+      const txt = await res.text();
+      box.innerHTML = `<div class="empty-state">数据量趋势加载失败：${escapeHtml(txt || res.statusText)}</div>`;
+      if (status) status.textContent = '加载失败';
+      updateVolumeSummary(null);
+      return;
+    }
+    const payload = await res.json();
+    renderVolumeChart(payload);
+  } catch (err) {
+    box.innerHTML = '<div class="empty-state">数据量趋势加载失败</div>';
+    if (status) status.textContent = '加载失败';
+    updateVolumeSummary(null);
+  }
 }
 
 function setQuickCount(count) {
@@ -246,10 +346,16 @@ bindSourceSelector(async () => {
   updateSourceUi();
   document.getElementById('results').innerHTML = '';
   await loadQuickSeeds();
+  await loadVolumeTrend();
+});
+
+window.addEventListener('resize', () => {
+  if (volumeChartInstance) volumeChartInstance.resize();
 });
 
 (async () => {
   await loadSourceCatalog();
   updateSourceUi();
   await loadQuickSeeds();
+  await loadVolumeTrend();
 })();

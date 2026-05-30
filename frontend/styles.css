@@ -371,6 +371,18 @@ select:focus {
   align-items: center;
 }
 
+.source-picker {
+  margin-top: 14px;
+  max-width: 340px;
+}
+
+.source-picker label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .search-input {
   display: flex;
   gap: 10px;

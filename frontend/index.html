@@ -20,6 +20,7 @@
       </div>
       <nav class="topnav">
         <a class="active" href="index.html">关键词推荐</a>
+        <a href="trending.html">热词榜单</a>
         <span class="source-badge" id="currentSourceLabel">P4 主库</span>
       </nav>
     </header>
@@ -51,7 +52,27 @@
             <span class="tag">推荐结果 <strong id="resultCount">0</strong></span>
             <span class="tag">最后刷新 <strong id="lastUpdated">--</strong></span>
           </div>
+          <div class="filter-block source-picker">
+            <label for="demoSource">数据库</label>
+            <select id="demoSource"></select>
+          </div>
         </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">数据量趋势</div>
+          <div class="panel-note">按天统计当前数据源的相关数据总量，帮助你快速判断数据规模和活跃区间。</div>
+        </div>
+        <span class="source-badge" id="volumeStatus">等待加载...</span>
+      </div>
+      <div id="dataVolumeChart" class="chart-shell"></div>
+      <div class="source-row" style="margin-top:12px;">
+        <span class="tag">总量 <strong id="totalVolumeCount">--</strong></span>
+        <span class="tag">活跃天数 <strong id="activeDaysCount">--</strong></span>
+        <span class="tag">峰值日期 <strong id="peakDateLabel">--</strong></span>
       </div>
     </section>
 
@@ -105,6 +126,6 @@
     </div>
   </div>
 
-  <script src="main.js?v=2"></script>
+  <script src="main.js?v=3"></script>
 </body>
 </html>
