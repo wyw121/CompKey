@@ -175,6 +175,12 @@ python pipeline/update_db_from_incremental.py --db .\compkey_aol_demo.sqlite3 --
 
 如果你是基于仓库内置的 `data/source_logs/aol` 目录重新生成，`build_aol_snapshot.py` 会自动输出 `normalized/seed_cooccur.csv`，`ingest_incremental.py` 也会优先读取它，从而把 AOL 的候选词真正写入数据库。
 
+### AOL demo — 适合 / 不适合
+
+适合看什么：AOL demo 很适合用于教学与演示场景，尤其是展示基于“会话窗口”的共现如何产生候选词、观察短查询（多为 1–2 词）之间的联想路径，以及对阈值参数（如 min_cooccur、min_freq、top_k）敏感性的可视化对比。若你想快速演示 pipeline（快照→tokenize→ingest→更新数据库）或做算法参数敏感性测试，AOL 是轻量且直观的选择。
+
+不适合看什么：AOL 并不代表生产级、当代的搜索流量——样本有限、采样与时间窗口有偏、数据已做匿名化/清洗处理，因此不适合用于商业决策、完整行业竞争分析或跨语言/跨地域的泛化结论。AOL 以英语短查询为主，长尾/多词查询场景、复杂意图识别以及实时流量分析在此示例上效果有限。使用示例数据时请注意数据隐私与伦理限制。
+
 ### EDGAR demo
 
 EDGAR 更适合做“公开访问/检索日志”风格的兼容实验。
