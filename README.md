@@ -165,13 +165,15 @@ python pipeline/update_db_from_incremental.py --db .\compkey_p4.sqlite3 --inc .\
 
 ### AOL demo
 
-AOL 更接近经典搜索引擎 query log。
+AOL 更接近经典搜索引擎 query log。当前仓库里的 AOL demo 已通过会话窗口共现重建了 `competition_result`，因此不仅能看热词和趋势，也可以直接用于种子词推荐。
 
 ```powershell
 python pipeline/build_aol_snapshot.py --input https://www.cim.mcgill.ca/~dudek/206/Logs/AOL-user-ct-collection/user-ct-test-collection-01.txt --outdir data/source_logs/aol
 python pipeline/ingest_incremental.py --tokenized data/source_logs/aol/normalized/tokenized_queries.csv --outdir data/source_logs/aol/merged
 python pipeline/update_db_from_incremental.py --db .\compkey_aol_demo.sqlite3 --inc .\data\source_logs\aol\merged --config .\config\competition_params.yaml
 ```
+
+如果你是基于仓库内置的 `data/source_logs/aol` 目录重新生成，`build_aol_snapshot.py` 会自动输出 `normalized/seed_cooccur.csv`，`ingest_incremental.py` 也会优先读取它，从而把 AOL 的候选词真正写入数据库。
 
 ### EDGAR demo
 

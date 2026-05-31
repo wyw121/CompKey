@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 import gzip
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterator, List, Sequence, Tuple
 
@@ -51,6 +51,7 @@ AOL_STOPWORDS = {
 
 @dataclass(frozen=True)
 class AOLLogRecord:
+    event_dt: datetime
     event_time: str
     user_id: str
     query_text: str
@@ -73,6 +74,10 @@ def _normalize_text(text: str) -> str:
 def _parse_event_time(raw_time: str) -> str:
     dt = dateparser.parse(str(raw_time).strip())
     return dt.isoformat(sep=" ")
+
+
+def _parse_event_dt(raw_time: str) -> datetime:
+    return dateparser.parse(str(raw_time).strip())
 
 
 def _extract_tokens(query_text: str) -> Tuple[str, ...]:
@@ -204,6 +209,7 @@ def build_snapshot(inputs: Sequence[str], outdir: Path, seed_file: Path | None =
 
     canonical_rows: List[Dict[str, str]] = []
     tokenized_rows: List[Dict[str, str]] = []
+    records: List[AOLLogRecord] = []
     files_info: List[Dict[str, object]] = []
     total_events = 0
     total_token_rows = 0
@@ -229,13 +235,15 @@ def build_snapshot(inputs: Sequence[str], outdir: Path, seed_file: Path | None =
             if not raw_query or not raw_time:
                 continue
 
-            event_time = _parse_event_time(raw_time)
+            event_dt = _parse_event_dt(raw_time)
+            event_time = event_dt.isoformat(sep=" ")
             query_date = event_time[:10]
             query_text = _normalize_text(raw_query)
             tokens = _extract_tokens(raw_query)
             matched_seed = _match_seed(query_text, tokens, seed_phrases)
 
             record = AOLLogRecord(
+                event_dt=event_dt,
                 event_time=event_time,
                 user_id=raw_user_id,
                 query_text=query_text,
@@ -273,6 +281,8 @@ def build_snapshot(inputs: Sequence[str], outdir: Path, seed_file: Path | None =
                 file_tokens += 1
                 total_token_rows += 1
 
+            records.append(record)
+
             file_events += 1
             file_rows += 1
             total_events += 1
@@ -290,8 +300,43 @@ def build_snapshot(inputs: Sequence[str], outdir: Path, seed_file: Path | None =
             }
         )
 
+    seed_cooccur: Dict[Tuple[str, str], int] = {}
+    records_by_user: Dict[str, List[AOLLogRecord]] = {}
+    for record in records:
+        if not record.tokens:
+            continue
+        records_by_user.setdefault(record.user_id or "__unknown__", []).append(record)
+
+    window_queries = 2
+    session_gap_minutes = 45
+    for user_records in records_by_user.values():
+        user_records.sort(key=lambda item: item.event_dt)
+        for idx, anchor in enumerate(user_records):
+            anchor_seed = anchor.matched_seed or (anchor.tokens[0] if anchor.tokens else "")
+            if not anchor_seed:
+                continue
+
+            candidate_tokens = set()
+            left = max(0, idx - window_queries)
+            right = min(len(user_records) - 1, idx + window_queries)
+            for j in range(left, right + 1):
+                neighbor = user_records[j]
+                if abs((neighbor.event_dt - anchor.event_dt).total_seconds()) > session_gap_minutes * 60:
+                    continue
+                for token in neighbor.tokens:
+                    cand = token.strip().lower()
+                    if not cand or cand == anchor_seed:
+                        continue
+                    if cand in AOL_STOPWORDS or len(cand) < 2 or cand.isdigit():
+                        continue
+                    candidate_tokens.add(cand)
+
+            for cand in candidate_tokens:
+                seed_cooccur[(anchor_seed, cand)] = seed_cooccur.get((anchor_seed, cand), 0) + 1
+
     canonical_path = normalized_dir / "canonical_logs.csv"
     tokenized_path = normalized_dir / "tokenized_queries.csv"
+    seed_cooccur_path = normalized_dir / "seed_cooccur.csv"
     manifest_path = outdir / "manifest.json"
 
     with canonical_path.open("w", encoding="utf-8-sig", newline="") as f:
@@ -307,6 +352,12 @@ def build_snapshot(inputs: Sequence[str], outdir: Path, seed_file: Path | None =
         writer.writeheader()
         writer.writerows(tokenized_rows)
 
+    with seed_cooccur_path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["seed", "candidate", "cooccur"])
+        writer.writeheader()
+        for (seed, cand), cnt in sorted(seed_cooccur.items()):
+            writer.writerow({"seed": seed, "candidate": cand, "cooccur": cnt})
+
     manifest = {
         "source": "aol",
         "dataset": "AOL User Session Collection",
@@ -320,6 +371,12 @@ def build_snapshot(inputs: Sequence[str], outdir: Path, seed_file: Path | None =
         "outputs": {
             "canonical": str(canonical_path),
             "tokenized": str(tokenized_path),
+            "seed_cooccur": str(seed_cooccur_path),
+        },
+        "session_cooccur": {
+            "window_queries": window_queries,
+            "gap_minutes": session_gap_minutes,
+            "fallback_seed_strategy": "matched_seed_or_first_token",
         },
         "note": "AOL 是经典 query log，保留 Query、QueryTime、ItemRank 和 ClickURL，适合直接复用现有 pipeline。",
     }

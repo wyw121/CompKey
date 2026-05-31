@@ -27,7 +27,7 @@ def safe_parse_date(s):
         return None
 
 
-def ingest_tokenized(tokenized_path, outdir, chunksize=200000):
+def ingest_tokenized(tokenized_path, outdir, chunksize=200000, seed_cooccur_path=None):
     os.makedirs(outdir, exist_ok=True)
     keyword_date = {}
     seed_cooccur = {}
@@ -68,6 +68,29 @@ def ingest_tokenized(tokenized_path, outdir, chunksize=200000):
                 pair = (seed, cand)
                 seed_cooccur[pair] = seed_cooccur.get(pair, 0) + 1
 
+    seed_cooccur_override = seed_cooccur_path or os.path.join(os.path.dirname(tokenized_path), 'seed_cooccur.csv')
+    if os.path.exists(seed_cooccur_override):
+        try:
+            df_override = pd.read_csv(seed_cooccur_override, encoding='utf-8-sig')
+            if not df_override.empty and {'seed', 'candidate', 'cooccur'}.issubset(df_override.columns):
+                seed_cooccur = {}
+                for _, row in df_override.iterrows():
+                    seed = row.get('seed')
+                    cand = row.get('candidate')
+                    if pd.isna(seed) or pd.isna(cand):
+                        continue
+                    seed = str(seed).strip()
+                    cand = str(cand).strip()
+                    if not seed or not cand:
+                        continue
+                    cnt = int(row.get('cooccur', 0) or 0)
+                    if cnt <= 0:
+                        continue
+                    seed_cooccur[(seed, cand)] = seed_cooccur.get((seed, cand), 0) + cnt
+        except Exception:
+            # 只要当前 tokenized 能正常导入，就不让辅助 cooccur 文件影响主流程
+            pass
+
     # write keyword_date_counts.csv
     kd_path = os.path.join(outdir, 'keyword_date_counts.csv')
     with open(kd_path, 'w', encoding='utf-8') as f:
@@ -89,6 +112,7 @@ def ingest_tokenized(tokenized_path, outdir, chunksize=200000):
         'parsed_time_rows': int(parsed_time_rows),
         'skipped_time_rows': int(skipped_time_rows),
         'parsed_time_ratio': float(parsed_time_rows / total_rows) if total_rows else 0.0,
+        'seed_cooccur_override': bool(os.path.exists(seed_cooccur_override)),
         'note': '仅可解析时间戳的行会进入 keyword_timeseries；不再使用当前日期兜底。'
     }
     import json
@@ -102,8 +126,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--tokenized', required=True, help='tokenized CSV path')
     parser.add_argument('--outdir', required=True, help='output directory for incrementals')
+    parser.add_argument('--seed-cooccur', default=None, help='optional seed_cooccur CSV path; defaults to sibling seed_cooccur.csv next to tokenized input when present')
     args = parser.parse_args()
-    ingest_tokenized(args.tokenized, args.outdir)
+    ingest_tokenized(args.tokenized, args.outdir, seed_cooccur_path=args.seed_cooccur)
 
 
 if __name__ == '__main__':

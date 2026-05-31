@@ -52,8 +52,10 @@ def test_aol_adapter_end_to_end(tmp_path):
     assert res.returncode == 0, f"build_aol_snapshot failed: {res.stderr}\n{res.stdout}"
 
     tokenized = outdir / "normalized" / "tokenized_queries.csv"
+    seed_cooccur = outdir / "normalized" / "seed_cooccur.csv"
     manifest = outdir / "manifest.json"
     assert tokenized.exists()
+    assert seed_cooccur.exists()
     assert manifest.exists()
 
     res2 = subprocess.run(
@@ -91,6 +93,8 @@ def test_aol_adapter_end_to_end(tmp_path):
     cur.execute("SELECT COUNT(*) FROM keyword_timeseries")
     assert cur.fetchone()[0] > 0
     cur.execute("SELECT COUNT(*) FROM keyword_stats")
+    assert cur.fetchone()[0] > 0
+    cur.execute("SELECT COUNT(*) FROM competition_result")
     assert cur.fetchone()[0] > 0
     conn.close()
 
